@@ -32,6 +32,7 @@ async function api(path,options={}){
   const response=await fetch(path,{...options,headers:{...(options.headers||{}),'x-admin-token':adminToken}});
   const data=await response.json().catch(()=>({}));
   if(!response.ok)throw new Error(data.error||`Request failed (${response.status})`);
+  if(path==='/api/products'&&response.headers.get('X-Catalog-Source')==='demo')throw new Error('MongoDB is unreachable. The products shown in the storefront are demo fallback data, so edits and deletes cannot be saved. Check MONGODB_URI and the Railway MongoDB connection.');
   return data;
 }
 function renderProducts(products){
@@ -43,6 +44,7 @@ async function loadProducts(){renderProducts(await api('/api/products'));}
 async function connectAdmin(candidate){
   adminToken=candidate;
   const status=await api('/api/admin/status');
+  if(!status.mongoConnected)throw new Error(`Product management needs a live MongoDB connection. ${status.mongoMessage||'Check MONGODB_URI and the database network access list.'}`);
   sessionStorage.setItem(tokenKey,adminToken);
   showDashboard();
   const ready=status.mongoConnected&&status.cloudinaryConfigured;
