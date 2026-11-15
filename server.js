@@ -106,6 +106,36 @@ function slugify(value) {
   return String(value).normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 70) || 'product';
 }
 
+function publicIdFromUrl(value, resourceType) {
+  try {
+    const url = new URL(value);
+    if (url.hostname !== 'res.cloudinary.com') return null;
+    const marker = `/${resourceType}/upload/`;
+    const markerIndex = url.pathname.indexOf(marker);
+    if (markerIndex < 0) return null;
+    const parts = url.pathname.slice(markerIndex + marker.length).split('/').filter(Boolean);
+    const folderIndex = parts.findIndex((part, index) => part === 'pennybuys' && parts[index + 1] === 'products');
+    if (folderIndex < 0) return null;
+    const publicId = parts.slice(folderIndex).join('/');
+    return publicId.replace(/\.[^/.]+$/, '') || null;
+  } catch { return null; }
+}
+
+function productAssetIds(product, resourceType) {
+  if (resourceType === 'image') {
+    const stored = Array.isArray(product.cloudinaryImageIds) ? product.cloudinaryImageIds.filter(Boolean) : [];
+    if (stored.length) return stored;
+    return [product.image, ...(Array.isArray(product.gallery) ? product.gallery : [])].map(url => publicIdFromUrl(url, 'image')).filter(Boolean);
+  }
+  return [product.cloudinaryVideoId || publicIdFromUrl(product.video, 'video')].filter(Boolean);
+}
+
+async function destroyProductAssets(ids, resourceType) {
+  if (!ids.length) return;
+  const results = await Promise.allSettled(ids.map(publicId => cloudinary.uploader.destroy(publicId, { resource_type: resourceType, invalidate: true })));
+  results.filter(result => result.status === 'rejected').forEach(result => console.warn(`Cloudinary ${resourceType} cleanup failed:`, result.reason?.message || 'Unknown error'));
+}
+
 app.disable('x-powered-by');
 app.use(express.json({ limit: '1mb' }));
 
@@ -177,7 +207,9 @@ app.post('/api/products', requireAdmin, upload.fields([{ name: 'images', maxCoun
       badge: 'JUST ARRIVED', rating: '5.0', reviews: 0,
       image: imageAssets[0].secure_url,
       gallery: imageAssets.slice(1).map(asset => asset.secure_url),
+      cloudinaryImageIds: imageAssets.map(asset => asset.public_id),
       video: videoAsset?.secure_url || '',
+      cloudinaryVideoId: videoAsset?.public_id || '',
       inventory, description,
       alt: name,
       createdAt: now,
@@ -188,6 +220,85 @@ app.post('/api/products', requireAdmin, upload.fields([{ name: 'images', maxCoun
   } catch (error) {
     console.error('Product creation failed:', error.message);
     res.status(502).json({ error: 'The upload or product save failed. Check the Cloudinary and MongoDB configuration and try again.' });
+  }
+});
+
+app.put('/api/products/:id', requireAdmin, upload.fields([{ name: 'images', maxCount: 5 }, { name: 'video', maxCount: 1 }]), async (req, res) => {
+  const name = String(req.body.name || '').trim();
+  const category = String(req.body.category || '').trim();
+  const group = String(req.body.group || '').trim();
+  const description = String(req.body.description || '').trim();
+  const price = Number(req.body.price);
+  const inventory = Number(req.body.inventory);
+  const images = req.files?.images || [];
+  const video = req.files?.video?.[0];
+  if (name.length < 2 || name.length > 140) return res.status(400).json({ error: 'Product name must be between 2 and 140 characters.' });
+  if (!category || !group) return res.status(400).json({ error: 'Choose a product category.' });
+  if (!Number.isFinite(price) || price <= 0 || price > 100000) return res.status(400).json({ error: 'Enter a valid product price.' });
+  if (!Number.isInteger(inventory) || inventory < 0 || inventory > 1000000) return res.status(400).json({ error: 'Enter stock as a whole number from 0 to 1,000,000.' });
+  if (!description || description.length > 3000) return res.status(400).json({ error: 'Add a product description under 3,000 characters.' });
+  if ((images.length || video) && !process.env.CLOUDINARY_URL && !(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET)) {
+    return res.status(503).json({ error: 'Configure Cloudinary credentials on the server before changing product media.' });
+  }
+
+  let collection;
+  try { collection = await getProductsCollection(); }
+  catch (error) {
+    console.error('MongoDB connection failed:', error.message);
+    return res.status(503).json({ error: 'MongoDB is unavailable. Check MONGODB_URI and try again.' });
+  }
+  if (!collection) return res.status(503).json({ error: 'Set MONGODB_URI in .env or your Railway variables, then restart the server.' });
+  try {
+    const previous = await collection.findOne({ id: req.params.id }, { projection: { _id: 0 } });
+    if (!previous) return res.status(404).json({ error: 'Product not found.' });
+    const now = new Date();
+    const changes = { name, category, group, description, price, inventory, alt: name, updatedAt: now };
+    let oldImageIds = [];
+    let oldVideoIds = [];
+    if (images.length) {
+      const assets = await Promise.all(images.map(file => uploadToCloudinary(file, 'image', 'pennybuys/products')));
+      oldImageIds = productAssetIds(previous, 'image');
+      changes.image = assets[0].secure_url;
+      changes.gallery = assets.slice(1).map(asset => asset.secure_url);
+      changes.cloudinaryImageIds = assets.map(asset => asset.public_id);
+    }
+    if (video) {
+      const asset = await uploadToCloudinary(video, 'video', 'pennybuys/products');
+      oldVideoIds = productAssetIds(previous, 'video');
+      changes.video = asset.secure_url;
+      changes.cloudinaryVideoId = asset.public_id;
+    } else if (req.body.removeVideo === 'true') {
+      oldVideoIds = productAssetIds(previous, 'video');
+      changes.video = '';
+      changes.cloudinaryVideoId = '';
+    }
+    await collection.updateOne({ id: req.params.id }, { $set: changes });
+    await Promise.all([destroyProductAssets(oldImageIds, 'image'), destroyProductAssets(oldVideoIds, 'video')]);
+    const product = await collection.findOne({ id: req.params.id }, { projection: { _id: 0 } });
+    res.json({ product, products: await getStoreProducts() });
+  } catch (error) {
+    console.error('Product update failed:', error.message);
+    res.status(502).json({ error: 'The product update or media upload failed. Check the Cloudinary and MongoDB configuration and try again.' });
+  }
+});
+
+app.delete('/api/products/:id', requireAdmin, async (req, res) => {
+  let collection;
+  try { collection = await getProductsCollection(); }
+  catch (error) {
+    console.error('MongoDB connection failed:', error.message);
+    return res.status(503).json({ error: 'MongoDB is unavailable. Check MONGODB_URI and try again.' });
+  }
+  if (!collection) return res.status(503).json({ error: 'Set MONGODB_URI in .env or your Railway variables, then restart the server.' });
+  try {
+    const product = await collection.findOne({ id: req.params.id }, { projection: { _id: 0 } });
+    if (!product) return res.status(404).json({ error: 'Product not found.' });
+    await collection.deleteOne({ id: req.params.id });
+    await Promise.all([destroyProductAssets(productAssetIds(product, 'image'), 'image'), destroyProductAssets(productAssetIds(product, 'video'), 'video')]);
+    res.json({ products: await getStoreProducts() });
+  } catch (error) {
+    console.error('Product deletion failed:', error.message);
+    res.status(502).json({ error: 'The product could not be deleted. Check the MongoDB connection and try again.' });
   }
 });
 

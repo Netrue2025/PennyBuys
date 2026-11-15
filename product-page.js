@@ -16,11 +16,31 @@ else{
   const detailImage=document.querySelector('#detail-image');
   const demoGallery=products.filter(item=>item.id!==product.id&&(item.group===product.group||item.category===product.category)).map(item=>item.image);
   const productImages=[product.image,...(Array.isArray(product.gallery)?product.gallery:Array.isArray(product.images)?product.images:demoGallery)].filter((image,index,array)=>typeof image==='string'&&image&&array.indexOf(image)===index).slice(0,5);
+  const productMedia=productImages.map(src=>({type:'image',src}));
+  if(product.video)productMedia.push({type:'video',src:product.video,poster:product.image});
   const thumbnails=document.querySelector('#detail-thumbnails');
-  const showImage=(image,index)=>{detailImage.src=image;detailImage.alt=`${product.alt} — view ${index+1}`;thumbnails.querySelectorAll('button').forEach((button,buttonIndex)=>{button.classList.toggle('is-active',buttonIndex===index);button.setAttribute('aria-pressed',String(buttonIndex===index))})};
-  thumbnails.innerHTML=productImages.map((image,index)=>`<button class="detail-thumbnail${index===0?' is-active':''}" type="button" aria-label="View ${product.name}, image ${index+1}" aria-pressed="${index===0}" data-image-index="${index}"><img src="${image}" alt="" loading="lazy"></button>`).join('');
-  thumbnails.addEventListener('click',event=>{const button=event.target.closest('[data-image-index]');if(!button)return;showImage(productImages[Number(button.dataset.imageIndex)],Number(button.dataset.imageIndex))});
-  showImage(productImages[0]||product.image,0);
+  const detailVideo=document.querySelector('#detail-video');
+  const imageControls=document.querySelector('#detail-image-controls');
+  const imagePosition=document.querySelector('#detail-image-position');
+  let activeMediaIndex=0;
+  const showMedia=index=>{
+    activeMediaIndex=(index+productMedia.length)%productMedia.length;
+    const media=productMedia[activeMediaIndex];
+    detailVideo.pause();
+    if(media.type==='video'){
+      detailImage.hidden=true;detailVideo.hidden=false;detailVideo.src=media.src;detailVideo.poster=media.poster;detailVideo.load();
+    }else{
+      detailVideo.hidden=true;detailVideo.removeAttribute('src');detailVideo.load();detailImage.hidden=false;detailImage.src=media.src;detailImage.alt=`${product.alt} — view ${activeMediaIndex+1}`;
+    }
+    imagePosition.textContent=`${activeMediaIndex+1} / ${productMedia.length}`;
+    imageControls.hidden=productMedia.length<2;
+    thumbnails.querySelectorAll('button').forEach((button,buttonIndex)=>{button.classList.toggle('is-active',buttonIndex===activeMediaIndex);button.setAttribute('aria-pressed',String(buttonIndex===activeMediaIndex))});
+  };
+  thumbnails.innerHTML=productMedia.map((media,index)=>`<button class="detail-thumbnail${media.type==='video'?' detail-thumbnail-video':''}${index===0?' is-active':''}" type="button" aria-label="View ${product.name}, ${media.type==='video'?'video':'image '+(index+1)}" aria-pressed="${index===0}" data-media-index="${index}"><img src="${media.type==='video'?media.poster:media.src}" alt="" loading="lazy">${media.type==='video'?'<span class="thumbnail-play" aria-hidden="true">▶</span><span class="thumbnail-video-label">Video</span>':''}</button>`).join('');
+  thumbnails.addEventListener('click',event=>{const button=event.target.closest('[data-media-index]');if(button)showMedia(Number(button.dataset.mediaIndex))});
+  document.querySelector('#detail-previous').addEventListener('click',()=>showMedia(activeMediaIndex-1));
+  document.querySelector('#detail-next').addEventListener('click',()=>showMedia(activeMediaIndex+1));
+  showMedia(0);
   document.querySelector('#detail-badge').textContent=product.badge;
   document.querySelector('#detail-category').textContent=product.category;
   document.querySelector('#detail-name').textContent=product.name;
