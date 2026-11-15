@@ -30,7 +30,7 @@ Configure these environment variables locally in `.env` or in Railway's service 
 - Either `CLOUDINARY_URL` or `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET`.
 - `PORT` is provided by Railway; local default is `3000`.
 
-The first MongoDB connection seeds the collection with the current demo products when it is empty. The storefront's `/products-data.js` endpoint then serves current MongoDB products to the home, catalog, product and checkout pages. If no MongoDB URI is configured, the pages use the bundled demo data. Keep `.env` and all API secrets out of source control; `.env.example` contains placeholders only.
+The first MongoDB connection seeds the collection with the current demo products when it is empty. The storefront's `/products-data.js` endpoint then serves current MongoDB products to the home, catalog, product and checkout pages. If MongoDB is unconfigured or temporarily unreachable, the storefront and admin inventory list fall back to the bundled demo data; adding products still requires a working database. Replace `MONGODB_URI` in your local `.env` with the real URI from MongoDB Atlas. Keep `.env` and all API secrets out of source control; `.env.example` contains placeholders only.
 
 ## Deploy on Railway
 

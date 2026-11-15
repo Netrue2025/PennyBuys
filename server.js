@@ -13,7 +13,8 @@ const { v2: cloudinary } = require('cloudinary');
 const root = __dirname;
 const app = express();
 const port = Number(process.env.PORT || 3000);
-const mongoUri = process.env.MONGODB_URI;
+const configuredMongoUri = (process.env.MONGODB_URI || '').trim();
+const mongoUri = configuredMongoUri && !/cluster\.example\.mongodb\.net|username:password@/i.test(configuredMongoUri) ? configuredMongoUri : '';
 const mongoDbName = process.env.MONGODB_DB_NAME || 'pennybuys';
 const adminToken = process.env.ADMIN_TOKEN || '';
 const maxUploadBytes = 100 * 1024 * 1024;
@@ -111,7 +112,7 @@ app.get('/products-data.js', async (_req, res) => {
     const products = await getStoreProducts();
     res.type('js').set('Cache-Control', 'no-store').send(`window.STORE_PRODUCTS = ${JSON.stringify(products)};`);
   } catch (error) {
-    console.error('Could not load products from MongoDB:', error.message);
+    console.warn('MongoDB unavailable; serving demo catalog:', error.message);
     res.type('js').set('Cache-Control', 'no-store').send(`window.STORE_PRODUCTS = ${JSON.stringify(getDemoProducts())};`);
   }
 });
@@ -119,16 +120,18 @@ app.get('/products-data.js', async (_req, res) => {
 app.get('/api/products', async (_req, res) => {
   try { res.json(await getStoreProducts()); }
   catch (error) {
-    console.error('Could not load products from MongoDB:', error.message);
-    res.status(503).json({ error: 'The product database is temporarily unavailable.' });
+    console.warn('MongoDB unavailable; serving demo catalog:', error.message);
+    res.set('X-Catalog-Source', 'demo').json(getDemoProducts());
   }
 });
 
 app.get('/api/admin/status', requireAdmin, async (_req, res) => {
   let mongoConnected = false;
-  try { mongoConnected = Boolean(await getProductsCollection()); } catch {}
+  let mongoMessage = mongoUri ? 'MongoDB connected.' : 'Set MONGODB_URI to your real MongoDB Atlas connection string.';
+  try { mongoConnected = Boolean(await getProductsCollection()); }
+  catch { mongoMessage = 'MongoDB is unreachable. Check the Atlas URI, database user credentials and network access list.'; }
   const cloudinaryConfigured = Boolean(process.env.CLOUDINARY_URL || (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET));
-  res.json({ mongoConnected, cloudinaryConfigured });
+  res.json({ mongoConnected, mongoUriConfigured: Boolean(mongoUri), mongoMessage, cloudinaryConfigured });
 });
 
 app.post('/api/products', requireAdmin, upload.fields([{ name: 'images', maxCount: 5 }, { name: 'video', maxCount: 1 }]), async (req, res) => {

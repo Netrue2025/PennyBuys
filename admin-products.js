@@ -39,7 +39,7 @@ async function connectAdmin(candidate){
   showDashboard();
   const ready=status.mongoConnected&&status.cloudinaryConfigured;
   serviceStatus.classList.toggle('ready',ready);
-  serviceStatus.innerHTML=`<strong>${ready?'Services ready':'Setup needed'}</strong><span>MongoDB: ${status.mongoConnected?'connected':'not connected'}</span><span>Cloudinary: ${status.cloudinaryConfigured?'configured':'not configured'}</span>${ready?'':'<span>Set MONGODB_URI and Cloudinary credentials in your server environment before uploading.</span>'}`;
+  serviceStatus.innerHTML=`<strong>${ready?'Services ready':'Setup needed'}</strong><span>MongoDB: ${status.mongoConnected?'connected':escapeHTML(status.mongoMessage||'not connected')}</span><span>Cloudinary: ${status.cloudinaryConfigured?'configured':'not configured'}</span>${status.cloudinaryConfigured?'':'<span>Set Cloudinary credentials in your server environment before uploading.</span>'}`;
   await loadProducts();
 }
 document.querySelector('#admin-login-form').addEventListener('submit',async event=>{
