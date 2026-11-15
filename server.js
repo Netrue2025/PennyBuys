@@ -47,11 +47,6 @@ async function getProductsCollection() {
   if (!databasePromise) {
     databasePromise = client.connect().then(async () => {
       const collection = client.db(mongoDbName).collection('products');
-      const count = await collection.countDocuments();
-      if (count === 0) {
-        const now = new Date();
-        await collection.insertMany(getDemoProducts().map(product => ({ ...product, inventory: 10, createdAt: now, updatedAt: now })));
-      }
       await collection.createIndex({ id: 1 }, { unique: true });
       return collection;
     }).catch(error => {
@@ -62,11 +57,19 @@ async function getProductsCollection() {
   return databasePromise;
 }
 
+async function getDeletedDemoProductIds() {
+  if (!client) return new Set();
+  const records = await client.db(mongoDbName).collection('catalogOverrides').find({ type: 'deleted-demo-product' }, { projection: { id: 1, _id: 0 } }).toArray();
+  return new Set(records.map(record => record.id));
+}
+
 async function getStoreProducts() {
   const collection = await getProductsCollection();
-  if (!collection) return getDemoProducts();
-  const records = await collection.find({}, { projection: { _id: 0 } }).sort({ createdAt: -1 }).toArray();
-  return records.length ? records : getDemoProducts();
+  const records = collection ? await collection.find({}, { projection: { _id: 0 } }).sort({ createdAt: -1 }).toArray() : [];
+  const deletedDemoIds = await getDeletedDemoProductIds();
+  const recordIds = new Set(records.map(product => product.id));
+  const demoProducts = getDemoProducts().filter(product => !deletedDemoIds.has(product.id) && !recordIds.has(product.id));
+  return [...records, ...demoProducts];
 }
 
 function safeEqual(left, right) {
@@ -249,13 +252,40 @@ app.put('/api/products/:id', requireAdmin, upload.fields([{ name: 'images', maxC
   }
   if (!collection) return res.status(503).json({ error: 'Set MONGODB_URI in .env or your Railway variables, then restart the server.' });
   try {
-    const previous = await collection.findOne({ id: req.params.id }, { projection: { _id: 0 } });
+    const existingRecord = await collection.findOne({ id: req.params.id }, { projection: { _id: 0 } });
+    const previous = existingRecord || getDemoProducts().find(product => product.id === req.params.id);
     if (!previous) return res.status(404).json({ error: 'Product not found.' });
     const now = new Date();
     const changes = { name, category, group, description, price, inventory, alt: name, updatedAt: now };
     let oldImageIds = [];
     let oldVideoIds = [];
-    if (images.length) {
+    let imagePlan;
+    try { imagePlan = req.body.imagePlan ? JSON.parse(req.body.imagePlan) : null; }
+    catch { return res.status(400).json({ error: 'The image order is invalid. Refresh the product and try again.' }); }
+    if (imagePlan) {
+      const previousUrls = [previous.image, ...(Array.isArray(previous.gallery) ? previous.gallery : [])].filter(Boolean);
+      if (!imagePlan.length || imagePlan.length > 5) return res.status(400).json({ error: 'Keep between one and five product images.' });
+      const requestedUploads = imagePlan.filter(item => item?.kind === 'upload');
+      if (requestedUploads.length !== images.length || requestedUploads.some((item, index) => item.index !== index)) return res.status(400).json({ error: 'The uploaded image order is invalid. Refresh the product and try again.' });
+      if (imagePlan.some(item => item?.kind !== 'upload' && !(item?.kind === 'existing' && previousUrls.includes(item.url)))) return res.status(400).json({ error: 'The selected product images are invalid. Refresh the product and try again.' });
+      const uploadedAssets = await Promise.all(images.map(file => uploadToCloudinary(file, 'image', 'pennybuys/products')));
+      const usedUploadIndexes = new Set();
+      const ordered = imagePlan.map(item => {
+        if (item?.kind === 'existing' && previousUrls.includes(item.url)) return { url: item.url, publicId: publicIdFromUrl(item.url, 'image') };
+        if (item?.kind === 'upload' && Number.isInteger(item.index) && uploadedAssets[item.index] && !usedUploadIndexes.has(item.index)) {
+          usedUploadIndexes.add(item.index);
+          return { url: uploadedAssets[item.index].secure_url, publicId: uploadedAssets[item.index].public_id };
+        }
+        throw new Error('Invalid image order. Refresh the product and try again.');
+      });
+      if (usedUploadIndexes.size !== uploadedAssets.length) throw new Error('An uploaded image is missing from the product image order.');
+      const storedIds = Array.isArray(previous.cloudinaryImageIds) ? previous.cloudinaryImageIds : [];
+      const retainedUrls = new Set(ordered.filter(item => item.publicId || previousUrls.includes(item.url)).map(item => item.url));
+      oldImageIds = previousUrls.map((url, index) => ({ url, id: storedIds[index] || publicIdFromUrl(url, 'image') })).filter(item => item.id && !retainedUrls.has(item.url)).map(item => item.id);
+      changes.image = ordered[0].url;
+      changes.gallery = ordered.slice(1).map(item => item.url);
+      changes.cloudinaryImageIds = ordered.map(item => item.publicId || '');
+    } else if (images.length) {
       const assets = await Promise.all(images.map(file => uploadToCloudinary(file, 'image', 'pennybuys/products')));
       oldImageIds = productAssetIds(previous, 'image');
       changes.image = assets[0].secure_url;
@@ -272,7 +302,8 @@ app.put('/api/products/:id', requireAdmin, upload.fields([{ name: 'images', maxC
       changes.video = '';
       changes.cloudinaryVideoId = '';
     }
-    await collection.updateOne({ id: req.params.id }, { $set: changes });
+    await collection.updateOne({ id: req.params.id }, { $set: { ...previous, ...changes } }, { upsert: true });
+    await client.db(mongoDbName).collection('catalogOverrides').deleteOne({ id: req.params.id, type: 'deleted-demo-product' });
     await Promise.all([destroyProductAssets(oldImageIds, 'image'), destroyProductAssets(oldVideoIds, 'video')]);
     const product = await collection.findOne({ id: req.params.id }, { projection: { _id: 0 } });
     res.json({ product, products: await getStoreProducts() });
@@ -291,9 +322,12 @@ app.delete('/api/products/:id', requireAdmin, async (req, res) => {
   }
   if (!collection) return res.status(503).json({ error: 'Set MONGODB_URI in .env or your Railway variables, then restart the server.' });
   try {
-    const product = await collection.findOne({ id: req.params.id }, { projection: { _id: 0 } });
+    const product = await collection.findOne({ id: req.params.id }, { projection: { _id: 0 } }) || getDemoProducts().find(item => item.id === req.params.id);
     if (!product) return res.status(404).json({ error: 'Product not found.' });
     await collection.deleteOne({ id: req.params.id });
+    if (getDemoProducts().some(item => item.id === req.params.id)) {
+      await client.db(mongoDbName).collection('catalogOverrides').updateOne({ id: req.params.id, type: 'deleted-demo-product' }, { $setOnInsert: { id: req.params.id, type: 'deleted-demo-product', deletedAt: new Date() } }, { upsert: true });
+    }
     await Promise.all([destroyProductAssets(productAssetIds(product, 'image'), 'image'), destroyProductAssets(productAssetIds(product, 'video'), 'video')]);
     res.json({ products: await getStoreProducts() });
   } catch (error) {

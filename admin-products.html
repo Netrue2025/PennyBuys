@@ -23,7 +23,7 @@
           <label class="field-wide">Product description<textarea name="description" rows="4" maxlength="3000" required placeholder="Describe the product and its useful details"></textarea></label>
           <label class="file-field"><span>Product images <small>JPG, PNG, WebP, AVIF or GIF · up to 5 · max 100 MB each</small></span><input name="images" type="file" accept="image/jpeg,image/png,image/webp,image/avif,image/gif" multiple></label>
           <label class="file-field"><span>Product video <small>Optional · MP4, WebM or MOV · max 100 MB</small></span><input name="video" type="file" accept="video/mp4,video/webm,video/quicktime"><span id="remove-video-wrap" class="remove-video-wrap" hidden><input name="removeVideo" type="checkbox" value="true"> Remove current video</span></label>
-          <div id="existing-media" class="existing-media field-wide" hidden></div>
+          <section id="existing-media" class="existing-media field-wide" hidden aria-label="Product media"><strong class="existing-media-title">Product media</strong><p class="existing-media-help">The first image is the storefront preview. Reorder, remove, or add images below.</p><div id="existing-image-list" class="existing-image-list"></div><div id="existing-video-preview" class="existing-video-preview"></div></section>
           <div id="image-preview" class="image-preview field-wide" aria-live="polite"></div>
           <div class="submit-row field-wide"><button id="save-product" class="primary-button" type="submit">Upload and add product</button><button id="cancel-edit" class="quiet-button" type="button" hidden>Cancel edit</button><span>Media is uploaded to Cloudinary. Product details and inventory are saved in MongoDB.</span></div>
         </form>

@@ -12,9 +12,13 @@ const imageInput=productForm.elements.images;
 const videoInput=productForm.elements.video;
 const existingMedia=document.querySelector('#existing-media');
 const removeVideoWrap=document.querySelector('#remove-video-wrap');
+const imageList=document.querySelector('#existing-image-list');
+const videoPreview=document.querySelector('#existing-video-preview');
 let adminToken=sessionStorage.getItem(tokenKey)||'';
 let catalogProducts=[];
 let editingId='';
+let mediaItems=[];
+let currentVideoUrl='';
 const escapeHTML=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 
 function showLogin(message=''){
@@ -48,7 +52,8 @@ async function connectAdmin(candidate){
 }
 function cancelEdit(){
   editingId='';productForm.reset();productForm.elements.group.value='';
-  productForm.dataset.editId='';imageInput.required=true;removeVideoWrap.hidden=true;existingMedia.hidden=true;
+  productForm.dataset.editId='';imageInput.required=false;removeVideoWrap.hidden=true;existingMedia.hidden=true;
+  mediaItems=[];currentVideoUrl='';imageList.replaceChildren();videoPreview.replaceChildren();
   document.querySelector('#form-title').textContent='Add a product';
   document.querySelector('#save-product').textContent='Upload and add product';
   document.querySelector('#cancel-edit').hidden=true;
@@ -66,16 +71,29 @@ function editProduct(product){
   if(!option){option=new Option(product.category,product.category);option.dataset.group=product.group||'';categorySelect.add(option)}
   categorySelect.value=product.category||'';productForm.elements.group.value=product.group||option.dataset.group||'';
   imageInput.required=false;imageInput.value='';videoInput.value='';productForm.elements.removeVideo.checked=false;
-  document.querySelector('#image-preview').replaceChildren();
-  const imageCount=1+(product.gallery?.length||0);
-  existingMedia.textContent=`Current media: ${imageCount} image${imageCount===1?'':'s'}${product.video?' and a video':''}. Upload new images or a video to replace them.`;
-  existingMedia.hidden=false;removeVideoWrap.hidden=!product.video;
+  mediaItems=[product.image,...(Array.isArray(product.gallery)?product.gallery:[])].filter(Boolean).map(url=>({kind:'existing',url}));
+  currentVideoUrl=product.video||'';
+  document.querySelector('#image-preview').replaceChildren();renderMediaEditor();
   document.querySelector('#form-title').textContent=`Edit ${product.name}`;
   document.querySelector('#save-product').textContent='Save product changes';
   document.querySelector('#cancel-edit').hidden=false;
   productMessage.textContent='';productMessage.classList.remove('success');
   productForm.scrollIntoView({behavior:'smooth',block:'start'});
 }
+function renderMediaEditor(){
+  existingMedia.hidden=!mediaItems.length&&!currentVideoUrl&&!videoInput.files.length;
+  imageList.innerHTML=mediaItems.map((item,index)=>`<article class="media-item"><img src="${escapeHTML(item.kind==='existing'?item.url:item.preview)}" alt="Product image ${index+1}" loading="lazy"><div class="media-item-info"><b>${index===0?'Storefront preview':`Image ${index+1}`}</b><span>${item.kind==='existing'?'Current image':'New upload'}</span></div><div class="media-item-actions"><button type="button" class="quiet-button" data-media-action="up" data-index="${index}" aria-label="Move image ${index+1} earlier" ${index===0?'disabled':''}>Up</button><button type="button" class="quiet-button" data-media-action="down" data-index="${index}" aria-label="Move image ${index+1} later" ${index===mediaItems.length-1?'disabled':''}>Down</button><button type="button" class="delete-button" data-media-action="remove" data-index="${index}">Remove</button></div></article>`).join('');
+  if(videoInput.files[0]){
+    const src=URL.createObjectURL(videoInput.files[0]);videoPreview.innerHTML=`<div class="media-video-card"><video controls playsinline preload="metadata" src="${src}"></video><div><b>New video selected</b><button class="delete-button" type="button" data-video-remove>Remove video</button></div></div>`;
+  }else if(currentVideoUrl){
+    videoPreview.innerHTML=`<div class="media-video-card"><video controls playsinline preload="metadata" src="${escapeHTML(currentVideoUrl)}"></video><div><b>Current product video</b><button class="delete-button" type="button" data-video-remove>Remove video</button></div></div>`;
+  }else videoPreview.replaceChildren();
+}
+existingMedia.addEventListener('click',event=>{
+  const action=event.target.closest('[data-media-action]');
+  if(action){const index=Number(action.dataset.index);if(action.dataset.mediaAction==='remove')mediaItems.splice(index,1);else{const target=index+(action.dataset.mediaAction==='up'?-1:1);if(target>=0&&target<mediaItems.length)[mediaItems[index],mediaItems[target]]=[mediaItems[target],mediaItems[index]]}renderMediaEditor();return;}
+  if(event.target.closest('[data-video-remove]')){currentVideoUrl='';videoInput.value='';productForm.elements.removeVideo.checked=true;renderMediaEditor();}
+});
 document.querySelector('#admin-login-form').addEventListener('submit',async event=>{
   event.preventDefault();loginMessage.textContent='Checking access...';
   try{await connectAdmin(tokenInput.value.trim());loginMessage.textContent='';}
@@ -106,18 +124,26 @@ productForm.elements.category.addEventListener('change',event=>{
   productForm.elements.group.value=event.currentTarget.selectedOptions[0]?.dataset.group||'';
 });
 imageInput.addEventListener('change',event=>{
-  const files=[...event.currentTarget.files].slice(0,5);
-  document.querySelector('#image-preview').innerHTML=files.map(file=>`<img src="${URL.createObjectURL(file)}" alt="Preview of ${escapeHTML(file.name)}">`).join('');
+  const uploads=[...event.currentTarget.files].slice(0,5).map(file=>({kind:'upload',file,preview:URL.createObjectURL(file)}));
+  mediaItems=mediaItems.filter(item=>item.kind==='existing').concat(uploads);
+  document.querySelector('#image-preview').replaceChildren();renderMediaEditor();
 });
+videoInput.addEventListener('change',()=>{if(videoInput.files[0]){currentVideoUrl='';productForm.elements.removeVideo.checked=false;}renderMediaEditor()});
 productForm.addEventListener('submit',async event=>{
   event.preventDefault();productMessage.classList.remove('success');
-  if(!editingId&&!imageInput.files.length){productMessage.textContent='Choose at least one product image.';imageInput.focus();return;}
+  if(!mediaItems.length){productMessage.textContent='Keep at least one product image. The first image is used as the storefront preview.';imageInput.focus();return;}
+  if(mediaItems.length>5){productMessage.textContent='Keep no more than five product images. Remove an image or upload fewer files.';return;}
   productMessage.textContent=editingId?'Saving product changes...':'Uploading media and saving product...';
   const button=document.querySelector('#save-product');button.disabled=true;
   try{
     const method=editingId?'PUT':'POST';
     const endpoint=editingId?`/api/products/${encodeURIComponent(editingId)}`:'/api/products';
-    const response=await api(endpoint,{method,body:new FormData(productForm)});
+    const formData=new FormData(productForm);formData.delete('images');
+    let uploadIndex=0;
+    const imagePlan=mediaItems.map(item=>item.kind==='existing'?{kind:'existing',url:item.url}:{kind:'upload',index:uploadIndex++});
+    formData.set('imagePlan',JSON.stringify(imagePlan));
+    mediaItems.filter(item=>item.kind==='upload').forEach(item=>formData.append('images',item.file));
+    const response=await api(endpoint,{method,body:formData});
     window.STORE_PRODUCTS=response.products;
     const message=editingId?`${response.product.name} was updated.`:`${response.product.name} was added to the catalog.`;
     cancelEdit();productMessage.textContent=message;productMessage.classList.add('success');
