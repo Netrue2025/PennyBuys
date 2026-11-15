@@ -86,7 +86,8 @@ const upload = multer({
   fileFilter(_req, file, callback) {
     const isImage = file.fieldname === 'images' && /^image\/(jpeg|png|webp|avif|gif)$/.test(file.mimetype);
     const isVideo = file.fieldname === 'video' && /^video\/(mp4|webm|quicktime)$/.test(file.mimetype);
-    callback(isImage || isVideo ? null : new Error('Use JPG, PNG, WebP, AVIF or GIF images and MP4, WebM or MOV videos.'));
+    if (isImage || isVideo) callback(null, true);
+    else callback(new Error('Use JPG, PNG, WebP, AVIF or GIF images and MP4, WebM or MOV videos.'));
   }
 });
 
