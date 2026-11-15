@@ -36,6 +36,8 @@ The first MongoDB connection seeds the collection with the current demo products
 
 Create a Railway service from this repository. Railway can use the included `npm start` command; add the variables above to the service's environment settings. The server listens on Railway's `PORT` variable.
 
+For Railway's optional deployment health check, use `/health`. In service Networking settings, make sure the public domain's target port matches the port shown in the deployment log.
+
 ## Current demo behavior
 
 - Product search and category tabs filter the MongoDB catalog (or bundled sample products when MongoDB is not configured).

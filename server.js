@@ -191,7 +191,7 @@ app.post('/api/products', requireAdmin, upload.fields([{ name: 'images', maxCoun
   }
 });
 
-app.get('/api/health', (_req, res) => res.json({ ok: true }));
+app.get(['/health', '/api/health'], (_req, res) => res.json({ ok: true }));
 app.use(express.static(root, { extensions: ['html'], maxAge: '1d', setHeaders(res, filePath) {
   if (/\.(html|js|css)$/.test(filePath)) res.setHeader('Cache-Control', 'no-cache');
 } }));
@@ -202,7 +202,7 @@ app.use((error, _req, res, _next) => {
 });
 
 const server = http.createServer(app);
-server.listen(port, '0.0.0.0', () => console.log(`PennyBuys running on port ${port}`));
+server.listen(port, '0.0.0.0', () => console.log(`PennyBuys listening on 0.0.0.0:${port} (PORT ${process.env.PORT ? 'provided by Railway' : 'using local default'})`));
 
 async function close() {
   server.close();
