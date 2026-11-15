@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#17263b">
+  <title>Product manager — PennyBuys</title>
+  <link rel="stylesheet" href="admin-products.css">
+</head>
+<body>
+  <header class="admin-topbar"><a class="admin-brand" href="index.html"><img src="Media/pennybuys-logo.png" alt="PennyBuys"></a><span>PRODUCT ADMIN</span><a href="index.html">← Storefront</a></header>
+  <main class="admin-shell">
+    <section class="admin-heading"><div><p class="eyebrow">PENNYBUYS INVENTORY</p><h1>Product manager</h1><p>Add products with Cloudinary-hosted photos and video. Your storefront catalog updates from MongoDB.</p></div><button id="admin-logout" class="quiet-button" type="button" hidden>Sign out</button></section>
+    <section id="admin-login" class="admin-panel login-panel"><div><p class="eyebrow">STAFF ACCESS</p><h2>Sign in to manage products</h2><p>Enter the admin token configured on your server.</p></div><form id="admin-login-form"><label for="admin-token">Admin token</label><input id="admin-token" type="password" autocomplete="current-password" required placeholder="Enter your server admin token"><button class="primary-button" type="submit">Continue</button></form><p id="login-message" class="form-message" role="status" aria-live="polite"></p></section>
+    <div id="admin-dashboard" hidden>
+      <section id="service-status" class="service-status" aria-live="polite"></section>
+      <section class="admin-panel upload-panel"><div class="panel-heading"><div><p class="eyebrow">NEW LISTING</p><h2>Add a product</h2><p>Upload up to five product images and one optional product video.</p></div></div>
+        <form id="product-form" class="product-form" enctype="multipart/form-data">
+          <label class="field-wide">Product name<input name="name" required maxlength="140" placeholder="e.g. The Everyday Crossbody"></label>
+          <label>Category<select name="category" required><option value="">Choose category</option><option value="Bags & accessories" data-group="Bags">Bags &amp; accessories</option><option value="Travel & organisation" data-group="Travel">Travel &amp; organisation</option><option value="Home & little joys" data-group="Home">Home &amp; little joys</option><option value="Winter accessories" data-group="Bags">Winter accessories</option><option value="Clothing & accessories" data-group="Bags">Clothing &amp; accessories</option><option value="Electronics" data-group="Electronics">Electronics</option><option value="Beauty & personal care" data-group="Beauty">Beauty &amp; personal care</option></select><input type="hidden" name="group" value=""></label>
+          <label>Price (£)<input name="price" type="number" min="0.01" max="100000" step="0.01" required placeholder="0.00"></label>
+          <label>Stock quantity<input name="inventory" type="number" min="0" max="1000000" step="1" required value="0"></label>
+          <label class="field-wide">Product description<textarea name="description" rows="4" maxlength="3000" required placeholder="Describe the product and its useful details"></textarea></label>
+          <label class="file-field"><span>Product images <small>JPG, PNG, WebP, AVIF or GIF · up to 5 · max 100 MB each</small></span><input name="images" type="file" accept="image/jpeg,image/png,image/webp,image/avif,image/gif" multiple required></label>
+          <label class="file-field"><span>Product video <small>Optional · MP4, WebM or MOV · max 100 MB</small></span><input name="video" type="file" accept="video/mp4,video/webm,video/quicktime"></label>
+          <div id="image-preview" class="image-preview field-wide" aria-live="polite"></div>
+          <div class="submit-row field-wide"><button id="save-product" class="primary-button" type="submit">Upload and add product</button><span>Media is uploaded to Cloudinary. Product details and inventory are saved in MongoDB.</span></div>
+        </form>
+        <p id="product-message" class="form-message" role="status" aria-live="polite"></p>
+      </section>
+      <section class="inventory-section"><div class="inventory-heading"><div><p class="eyebrow">STOREFRONT CATALOG</p><h2>Products <span id="product-count">0</span></h2></div><button id="refresh-products" class="quiet-button" type="button">Refresh</button></div><div id="product-list" class="product-list"></div></section>
+    </div>
+  </main>
+  <script src="admin-products.js"></script>
+</body>
+</html>

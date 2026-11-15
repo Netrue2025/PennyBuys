@@ -10,21 +10,35 @@ Category navigation and product searches open `catalog.html` with URL parameters
 
 ## Run locally
 
-Requires Node.js 20 or newer. From this folder, run:
+Requires Node.js 20 or newer. Install dependencies, copy `.env.example` to `.env`, fill in the service credentials, then run:
 
 ```sh
+npm install
 npm start
 ```
 
 Then open `http://localhost:3000`.
 
+## Product admin, MongoDB and Cloudinary
+
+Open `http://localhost:3000/admin-products.html` and enter the server-side `ADMIN_TOKEN` to manage products. Add a name, category, description, price, stock quantity, one to five images, and an optional video. The server uploads media to the `pennybuys/products` Cloudinary folder and stores product records in the MongoDB `products` collection.
+
+Configure these environment variables locally in `.env` or in Railway's service variables:
+
+- `ADMIN_TOKEN`: a long, private token for the product admin page.
+- `MONGODB_URI` and optional `MONGODB_DB_NAME` (defaults to `pennybuys`).
+- Either `CLOUDINARY_URL` or `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET`.
+- `PORT` is provided by Railway; local default is `3000`.
+
+The first MongoDB connection seeds the collection with the current demo products when it is empty. The storefront's `/products-data.js` endpoint then serves current MongoDB products to the home, catalog, product and checkout pages. If no MongoDB URI is configured, the pages use the bundled demo data. Keep `.env` and all API secrets out of source control; `.env.example` contains placeholders only.
+
 ## Deploy on Railway
 
-Create a Railway service from this repository. Railway can use the included `npm start` command; the server listens on the `PORT` environment variable. No database or environment secrets are required for this front end demo.
+Create a Railway service from this repository. Railway can use the included `npm start` command; add the variables above to the service's environment settings. The server listens on Railway's `PORT` variable.
 
 ## Current demo behavior
 
-- Product search and category tabs filter the sample products.
+- Product search and category tabs filter the MongoDB catalog (or bundled sample products when MongoDB is not configured).
 - Product cards open a detail page with descriptions, highlights, care, delivery and returns information.
 - Favourites are visual only and are not saved.
 - The shopping bag is saved in the current browser using local storage.
@@ -34,6 +48,6 @@ Create a Railway service from this repository. Railway can use the included `npm
 - Customers can look up an order using its number and checkout email. Staff can use `admin-orders.html` to change status and add the tracking number shown to the customer once the order is on the way.
 - Order statuses are: Order is being processed, Packed and ready for delivery, On the way for delivery, and Delivered.
 - Checkout and order management are front-end demos. Orders and status updates are stored in the current browser only; payment is not connected.
-- Product photography is loaded from Unsplash URLs for demonstration. Replace these with approved Cloudinary assets when product photography is ready.
+- Existing demo product photography is loaded from Unsplash. New admin uploads are stored in Cloudinary and appear in the storefront catalog.
 
-MongoDB-backed orders, authenticated admin access, payment processing, shipping/tax rules, and customer accounts belong in the full-stack implementation phase. Keep payment credentials and Cloudinary secrets on the server, not in browser code.
+Orders and customer accounts still use the browser prototype storage, and payment is not connected. The product admin is protected by a shared server-side token; replace it with full user and role management before opening the admin to multiple staff members. Keep payment credentials and Cloudinary secrets on the server, not in browser code.

@@ -37,8 +37,9 @@ else{
     'desk-organiser':{description:'Give your everyday bits a tidy little home and make a calmer corner for work, notes and plans.',points:['Keeps small desk essentials together','Simple, versatile style','A useful home-office gift'],care:'Dust or wipe with a soft dry cloth.'},
     'mini-pouch':{description:'A little zip pouch for small essentials, whether you pop it in your handbag, tote or travel bag.',points:['Compact and easy to carry','Zip closure keeps items together','Useful for travel or daily errands'],care:'Wipe gently with a soft, damp cloth. Allow to air dry.'}
   }[product.id]||{description:product.alt,points:['Thoughtfully selected for everyday use','A lovely gift or treat for yourself','Ready to become one of your everyday favourites'],care:'Wipe clean gently and store in a cool, dry place.'};
-  document.querySelector('#detail-description').textContent=details.description;
-  document.querySelector('#detail-full-description').textContent=details.description;
+  const productDescription=product.description||details.description;
+  document.querySelector('#detail-description').textContent=productDescription;
+  document.querySelector('#detail-full-description').textContent=productDescription;
   document.querySelector('#detail-highlights').innerHTML=details.points.map(point=>`<li>${point}</li>`).join('');
   document.querySelector('#detail-care').textContent=details.care;
   const related=products.filter(item=>item.id!==product.id&&(item.group===product.group||item.category===product.category)).slice(0,4);
