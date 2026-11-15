@@ -13,8 +13,14 @@ else{
   document.querySelector('#product-detail').hidden=false;
   document.title=`${product.name} — PennyBuys`;
   document.querySelector('#product-crumb').textContent=product.name;
-  document.querySelector('#detail-image').src=product.image;
-  document.querySelector('#detail-image').alt=product.alt;
+  const detailImage=document.querySelector('#detail-image');
+  const demoGallery=products.filter(item=>item.id!==product.id&&(item.group===product.group||item.category===product.category)).map(item=>item.image);
+  const productImages=[product.image,...(Array.isArray(product.gallery)?product.gallery:Array.isArray(product.images)?product.images:demoGallery)].filter((image,index,array)=>typeof image==='string'&&image&&array.indexOf(image)===index).slice(0,5);
+  const thumbnails=document.querySelector('#detail-thumbnails');
+  const showImage=(image,index)=>{detailImage.src=image;detailImage.alt=`${product.alt} — view ${index+1}`;thumbnails.querySelectorAll('button').forEach((button,buttonIndex)=>{button.classList.toggle('is-active',buttonIndex===index);button.setAttribute('aria-pressed',String(buttonIndex===index))})};
+  thumbnails.innerHTML=productImages.map((image,index)=>`<button class="detail-thumbnail${index===0?' is-active':''}" type="button" aria-label="View ${product.name}, image ${index+1}" aria-pressed="${index===0}" data-image-index="${index}"><img src="${image}" alt="" loading="lazy"></button>`).join('');
+  thumbnails.addEventListener('click',event=>{const button=event.target.closest('[data-image-index]');if(!button)return;showImage(productImages[Number(button.dataset.imageIndex)],Number(button.dataset.imageIndex))});
+  showImage(productImages[0]||product.image,0);
   document.querySelector('#detail-badge').textContent=product.badge;
   document.querySelector('#detail-category').textContent=product.category;
   document.querySelector('#detail-name').textContent=product.name;
@@ -40,4 +46,5 @@ else{
   let qty=1;
   document.querySelectorAll('[data-qty-step]').forEach(button=>button.addEventListener('click',()=>{qty=Math.max(1,Math.min(20,qty+Number(button.dataset.qtyStep)));document.querySelector('#detail-qty').value=qty;document.querySelector('#detail-qty').textContent=qty}));
   document.querySelector('#detail-add').addEventListener('click',()=>{addProduct(product.id,qty);const message=document.querySelector('#detail-added');message.textContent=`${qty} × ${product.name} added to your bag.`;document.querySelector('#detail-add').textContent='Added to bag ✓';setTimeout(()=>document.querySelector('#detail-add').textContent='Add to bag',1400)});
+  document.querySelector('#detail-buy').addEventListener('click',()=>{addProduct(product.id,qty);location.href='checkout.html'});
 }
