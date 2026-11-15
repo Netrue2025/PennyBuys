@@ -83,6 +83,58 @@ body{font-family:'Market Sans',Arial,sans-serif;font-size:14px;color:#191919;bac
   }
 }
 
+/* PennyBuys navigation polish and compact-screen refinements */
+.utility-bar{width:100%;max-width:none;height:38px;margin:0;padding:0 max(calc((100vw - 1320px)/2 + 28px),4%);background:#17263b;color:#f7f8fc;border:0;font-size:11px;letter-spacing:.01em;position:relative;z-index:22}
+.utility-bar>div{gap:25px}
+.utility-bar a{color:#e5eaf3;transition:color .18s ease}
+.utility-bar a:hover{color:#ffae58;text-decoration:none}
+.utility-bar .signin-link{color:#ffb45f;text-decoration:none;font-weight:600;border-bottom:1px solid #ffb45f;padding-bottom:1px}
+.utility-bar .signin-link:hover{color:#ffd49b;border-color:#ffd49b}
+.utility-bar .deliver-to{color:#c9d2e0}
+.utility-bar .deliver-to b{color:#fff}
+.site-header{min-height:76px;background:#fffefa;padding-left:max(calc((100vw - 1320px)/2 + 28px),4%);padding-right:max(calc((100vw - 1320px)/2 + 28px),4%);box-shadow:0 3px 12px #1a2b3b0a}
+.site-header .wordmark img{object-fit:contain}
+.main-nav{background:#f8f7f2;border-top:1px solid #eeece5;border-bottom:1px solid #e6e3db;gap:clamp(16px,2.2vw,30px)}
+.main-nav a{padding:11px 0;transition:color .18s ease}
+.main-nav a:focus-visible,.utility-bar a:focus-visible,.site-header a:focus-visible,.site-header button:focus-visible{outline:2px solid #f29a36;outline-offset:3px;border-radius:3px}
+@media(max-width:720px){
+  .utility-bar{height:36px;padding:0 15px;font-size:10px;letter-spacing:.01em}
+  .utility-bar>span{display:flex;align-items:center;gap:4px}
+  .utility-bar>div{display:none}
+  .utility-bar .signin-link{padding:3px 7px;border:1px solid #718096;border-radius:999px;margin-left:2px;line-height:1}
+  .site-header{height:66px;min-height:66px;padding:0 12px;gap:8px;position:sticky;top:0;box-shadow:0 4px 12px #17263b12}
+  .site-header .wordmark{flex:none;max-width:98px;overflow:hidden}
+  .site-search{flex:1;min-width:0;height:39px;border-radius:22px;background:#fff;padding-right:4px}
+  .site-search input{min-width:0}
+  .header-actions{flex:none;gap:2px}
+  .header-actions .icon-button{min-width:35px;width:35px;height:40px}
+  .header-actions .icon-button svg{width:19px;height:19px}
+  .mobile-menu,.search-panel{top:102px}
+  .mobile-menu{max-height:calc(100dvh - 108px);overflow:auto;padding-bottom:max(20px,env(safe-area-inset-bottom))}
+  .mobile-menu a{min-height:46px;display:flex;align-items:center}
+  .hero{overflow:hidden;border-radius:6px}
+  .benefit-strip{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .category-grid,.product-grid{min-width:0}
+  .category-card,.product-card{min-width:0}
+  .product-name{line-height:1.35;overflow-wrap:anywhere}
+  .product-tabs{overflow-x:auto;scrollbar-width:none;white-space:nowrap;padding-bottom:2px}
+  .product-tabs::-webkit-scrollbar{display:none}
+  .footer-main{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .footer-column,.footer-contact{min-width:0}
+  .footer-contact>a{overflow-wrap:anywhere}
+  .catalog-page .mobile-menu{top:102px}
+}
+@media(max-width:380px){
+  .utility-bar{padding:0 11px;font-size:9px}
+  .site-header{padding:0 9px;gap:6px}
+  .site-header .wordmark{max-width:82px;font-size:17px}
+  .site-search{padding-left:7px}
+  .site-search input{font-size:11px}
+  .header-actions .icon-button{min-width:31px;width:31px}
+  .category-copy b{font-size:11px}
+  .product-grid{gap:15px 8px}
+}
+
 .product-image { position: relative; }
 .product-detail-link { position: absolute; inset: 0; z-index: 0; display: block; }
 .product-detail-link img { display: block; width: 100%; height: 100%; object-fit: cover; }

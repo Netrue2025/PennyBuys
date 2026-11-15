@@ -1,5 +1,5 @@
 const products=window.STORE_PRODUCTS||[];
-const bagKey='morrow-market-bag';
+const bagKey='pennybuys-bag';
 const ordersKey='pennybuys-orders';
 const money=value=>`£${Number(value).toFixed(2)}`;
 const escapeHTML=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));

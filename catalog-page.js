@@ -60,7 +60,7 @@ function renderCatalog(){
   const heading=searchTerm?`Search results for “${searchTerm}”`:currentCategory||'Shop all products';
   document.querySelector('#catalog-title').textContent=heading;
   document.querySelector('#catalog-breadcrumb-current').textContent=heading;
-  document.title=`${heading} — D Corner Shop`;
+  document.title=`${heading} — PennyBuys`;
   document.querySelector('#catalog-description').textContent=searchTerm?`Products related to ${searchTerm}, picked from our current collection.`:currentCategory?`Browse all ${currentCategory.toLowerCase()} in our current collection.`:'Explore the latest thoughtful finds for everyday living.';
   document.querySelector('#catalog-search-input').value=searchTerm;
   document.querySelector('#catalog-search-category').value=categoryNames[category]?category:'All categories';
@@ -74,11 +74,11 @@ function renderCatalog(){
   </article>`).join('');
 }
 function updateBagCount(){
-  try{const bag=JSON.parse(localStorage.getItem('morrow-market-bag')||'[]');document.querySelector('.catalog-basket .bag-count').textContent=bag.reduce((sum,line)=>sum+line.qty,0)}catch{document.querySelector('.catalog-basket .bag-count').textContent='0'}
+  try{const bag=JSON.parse(localStorage.getItem('pennybuys-bag')||'[]');document.querySelector('.catalog-basket .bag-count').textContent=bag.reduce((sum,line)=>sum+line.qty,0)}catch{document.querySelector('.catalog-basket .bag-count').textContent='0'}
 }
 let toastTimer;
 function addToBag(id){
-  try{const bag=JSON.parse(localStorage.getItem('morrow-market-bag')||'[]');const line=bag.find(item=>item.id===id);if(line)line.qty++;else bag.push({id,qty:1});localStorage.setItem('morrow-market-bag',JSON.stringify(bag));updateBagCount();const message=document.querySelector('.catalog-toast');message.textContent=`${catalogProducts.find(item=>item.id===id).name} added to your bag`;message.classList.add('is-visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>message.classList.remove('is-visible'),2200)}catch{window.alert('Your browser could not save the shopping bag. Please try again.')}
+  try{const bag=JSON.parse(localStorage.getItem('pennybuys-bag')||'[]');const line=bag.find(item=>item.id===id);if(line)line.qty++;else bag.push({id,qty:1});localStorage.setItem('pennybuys-bag',JSON.stringify(bag));updateBagCount();const message=document.querySelector('.catalog-toast');message.textContent=`${catalogProducts.find(item=>item.id===id).name} added to your bag`;message.classList.add('is-visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>message.classList.remove('is-visible'),2200)}catch{window.alert('Your browser could not save the shopping bag. Please try again.')}
 }
 document.querySelector('#catalog-search-form').addEventListener('submit',event=>{
   event.preventDefault();const chosen=document.querySelector('#catalog-search-category').value;

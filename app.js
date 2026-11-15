@@ -2,7 +2,7 @@ const products=window.STORE_PRODUCTS;
 const grid=document.querySelector('#product-grid');
 const tabs=[...document.querySelectorAll('.product-tabs button')];
 document.querySelector('.drawer-header h2')?.insertAdjacentHTML('afterbegin','<svg class="bag-heading-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h14l1 13H4L5 8Z"/><path d="M9 9V6a3 3 0 0 1 6 0v3"/></svg>');
-const cartKey='morrow-market-bag';
+const cartKey='pennybuys-bag';
 let activeFilter='All';
 let query='';
 let bag=readBag();

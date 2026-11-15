@@ -2,7 +2,7 @@ const products=window.STORE_PRODUCTS||[];
 const id=new URLSearchParams(location.search).get('id');
 const product=products.find(item=>item.id===id);
 const money=value=>`£${Number(value).toFixed(2)}`;
-const bagKey='morrow-market-bag';
+const bagKey='pennybuys-bag';
 const bagCount=document.querySelector('.commerce-bag-count');
 function readBag(){try{return JSON.parse(localStorage.getItem(bagKey)||'[]')}catch{return []}}
 function updateBagCount(){bagCount.textContent=readBag().reduce((sum,item)=>sum+Number(item.qty||0),0)}
