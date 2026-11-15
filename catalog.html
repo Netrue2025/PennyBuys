@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="description" content="Browse D Corner Shop products and find the things you are looking for.">
+  <title>Shop products — D Corner Shop</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="catalog.css">
+</head>
+<body class="catalog-page">
+  <div class="utility-bar"><span>Hi! <a href="signin.html" class="signin-link">Sign in</a> or <a href="signup.html" class="signin-link">register</a></span><div><a href="index.html#shop">Deals</a><a href="index.html#story">About D Corner Shop</a><a href="#footer">Help &amp; Contact</a><span class="deliver-to">Deliver to <b>UK</b></span></div></div>
+  <header class="site-header">
+    <button class="icon-button menu-toggle" aria-label="Open menu" aria-expanded="false"><span></span><span></span></button>
+    <a class="wordmark" href="index.html" aria-label="PennyBuys home"><img src="Media/pennybuys-logo.png" alt="PennyBuys"></a>
+    <button class="browse-categories" type="button" aria-label="Browse categories"><svg class="browse-lines" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span>Shop by<br>category</span><svg class="browse-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></button>
+    <form class="site-search" id="catalog-search-form"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"></circle><path d="m16 16 5 5"></path></svg><input id="catalog-search-input" type="search" placeholder="Search for anything" autocomplete="off"><select id="catalog-search-category" aria-label="Choose a category"><option>All categories</option><option>Bags</option><option>Travel</option><option>Home</option><option>Under £20</option></select><button type="submit">Search</button></form>
+    <div class="header-actions"><a class="catalog-home-link" href="index.html">Home</a><a class="catalog-basket" href="checkout.html" aria-label="Shopping bag"><svg class="catalog-bag-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h14l1 13H4L5 8Z"/><path d="M9 9V6a3 3 0 0 1 6 0v3"/></svg><span class="catalog-bag-label">Bag</span><span class="bag-count">0</span></a></div>
+  </header>
+  <nav class="main-nav" aria-label="Shop categories"><a href="catalog.html">Shop all</a><a href="catalog.html?category=Bags" data-category-link="Bags">Bags &amp; accessories</a><a href="catalog.html?category=Travel" data-category-link="Travel">Travel essentials</a><a href="catalog.html?category=Home" data-category-link="Home">Home &amp; living</a><a href="catalog.html?category=Under%20%C2%A320" data-category-link="Under £20">Gifts under £20</a></nav>
+  <div class="mobile-menu" aria-hidden="true"><a href="catalog.html">Shop all</a><a href="catalog.html?category=Bags" data-category-link="Bags">Bags &amp; accessories</a><a href="catalog.html?category=Travel" data-category-link="Travel">Travel essentials</a><a href="catalog.html?category=Home" data-category-link="Home">Home &amp; living</a><a href="catalog.html?category=Under%20%C2%A320" data-category-link="Under £20">Gifts under £20</a><a href="index.html#footer">Help &amp; Contact</a></div>
+
+  <main class="catalog-main">
+    <div class="catalog-breadcrumb"><a href="index.html">Home</a><span>/</span><a href="catalog.html">Shop</a><span>/</span><span id="catalog-breadcrumb-current">All products</span></div>
+    <section class="catalog-intro"><div><div class="eyebrow">A GOOD PLACE TO FIND IT</div><h1 id="catalog-title">Shop all products</h1><p id="catalog-description">Explore the latest thoughtful finds for everyday living.</p></div><div class="catalog-feature-mark" aria-hidden="true">✳</div></section>
+    <nav class="catalog-chips" aria-label="Product categories"><a href="catalog.html" data-category-link="">All products</a><a href="catalog.html?category=Bags" data-category-link="Bags">Bags &amp; accessories</a><a href="catalog.html?category=Travel" data-category-link="Travel">Travel essentials</a><a href="catalog.html?category=Home" data-category-link="Home">Home &amp; living</a><a href="catalog.html?category=Under%20%C2%A320" data-category-link="Under £20">Under £20</a></nav>
+    <div class="catalog-toolbar"><p id="catalog-result-count" aria-live="polite"></p><label for="catalog-sort">Sort by <select id="catalog-sort"><option value="featured">Featured</option><option value="price-low">Price: low to high</option><option value="price-high">Price: high to low</option><option value="rating">Top rated</option></select></label></div>
+    <section id="catalog-grid" class="product-grid catalog-grid" aria-label="Products"></section>
+    <section id="catalog-empty" class="catalog-empty" hidden><span>We couldn't find a match this time.</span><p>Try a different search, or browse all of our finds.</p><a class="button button-dark" href="catalog.html">Shop all products <span aria-hidden="true">&rarr;</span></a></section>
+  </main>
+
+  <footer class="catalog-footer" id="footer"><a class="wordmark" href="index.html" aria-label="PennyBuys home"><img src="Media/pennybuys-logo.png" alt="PennyBuys"></a><span>Thoughtful finds for everyday living.</span><a href="index.html">Back to home</a></footer>
+  <div class="catalog-toast" role="status" aria-live="polite"></div>
+  <script src="image-fallback.js"></script>
+  <script src="products-data.js"></script>
+  <script src="catalog-page.js"></script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "name": "morrow-market-storefront",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A responsive UK-focused ecommerce storefront landing page demo.",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
