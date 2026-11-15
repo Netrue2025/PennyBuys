@@ -1,9 +1,9 @@
-require('dotenv').config();
+const path = require('node:path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const http = require('node:http');
-const path = require('node:path');
 const vm = require('node:vm');
 const express = require('express');
 const multer = require('multer');
@@ -18,6 +18,7 @@ const mongoUri = configuredMongoUri && !/cluster\.example\.mongodb\.net|username
 const mongoDbName = process.env.MONGODB_DB_NAME || 'pennybuys';
 const adminToken = process.env.ADMIN_TOKEN || '';
 const maxUploadBytes = 100 * 1024 * 1024;
+const mongoUriIsPlaceholder = /cluster\.example\.mongodb\.net|username:password@/i.test(configuredMongoUri);
 const client = mongoUri ? new MongoClient(mongoUri, { serverSelectionTimeoutMS: 7000 }) : null;
 let databasePromise;
 let demoProducts;
@@ -128,7 +129,7 @@ app.get('/api/products', async (_req, res) => {
 
 app.get('/api/admin/status', requireAdmin, async (_req, res) => {
   let mongoConnected = false;
-  let mongoMessage = mongoUri ? 'MongoDB connected.' : 'Set MONGODB_URI to your real MongoDB Atlas connection string.';
+  let mongoMessage = mongoUri ? 'MongoDB connected.' : mongoUriIsPlaceholder ? 'MONGODB_URI still contains the example host. Replace it with your real MongoDB Atlas connection string.' : 'Set MONGODB_URI to your real MongoDB Atlas connection string.';
   try { mongoConnected = Boolean(await getProductsCollection()); }
   catch { mongoMessage = 'MongoDB is unreachable. Check the Atlas URI, database user credentials and network access list.'; }
   const cloudinaryConfigured = Boolean(process.env.CLOUDINARY_URL || (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET));
@@ -161,7 +162,7 @@ app.post('/api/products', requireAdmin, upload.fields([{ name: 'images', maxCoun
     console.error('MongoDB connection failed:', error.message);
     return res.status(503).json({ error: 'MongoDB is unavailable. Check MONGODB_URI and try again.' });
   }
-  if (!collection) return res.status(503).json({ error: 'Configure MONGODB_URI before adding products.' });
+  if (!collection) return res.status(503).json({ error: mongoUriIsPlaceholder ? 'Replace the example MONGODB_URI in .env with your real MongoDB Atlas connection string, then restart the server.' : 'Set MONGODB_URI in .env or your Railway variables, then restart the server.' });
 
   try {
     const imageAssets = await Promise.all(images.map(file => uploadToCloudinary(file, 'image', 'pennybuys/products')));
