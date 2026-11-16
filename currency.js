@@ -1,4 +1,5 @@
 (() => {
+  const pageVisitStartedAt = Date.now();
   const countries = {
     GB: { name: 'United Kingdom', currency: 'GBP', locale: 'en-GB' },
     NG: { name: 'Nigeria', currency: 'NGN', locale: 'en-NG' },
@@ -228,7 +229,8 @@
           window.setTimeout(() => dismiss(true), 900);
         } catch (error) { message.textContent = error.message; button.disabled = false; }
       });
-      window.setTimeout(() => { if (dialog.isConnected && !document.querySelector('dialog[open]')) dialog.showModal(); }, 900);
+      const offerDelay = Math.max(0, 25000 - (Date.now() - pageVisitStartedAt));
+      window.setTimeout(() => { if (dialog.isConnected && !document.querySelector('dialog[open]')) dialog.showModal(); }, offerDelay);
     } catch { /* Storefront remains usable if campaign settings are unavailable. */ }
   }
 
