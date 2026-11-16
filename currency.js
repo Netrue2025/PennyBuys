@@ -150,18 +150,25 @@
         if (anchor && !document.querySelector('.commercial-promo-strip')) {
           const strip = document.createElement('aside');
           strip.className = 'commercial-promo-strip';
-          const text = announcements.join('   ·   ');
+          const text = announcements.join(' · ');
           strip.setAttribute('role', 'note');
           strip.setAttribute('aria-label', text);
-          strip.innerHTML = '<span class="commercial-promo-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 7h12v11H3zM15 11h4l3 3v4h-7zM7 18a2 2 0 1 0 4 0m6 0a2 2 0 1 0 4 0"/></svg></span><div class="commercial-promo-window"><div class="commercial-promo-track"><span></span></div></div><span class="commercial-promo-spark" aria-hidden="true">✦</span>';
-          strip.querySelector('.commercial-promo-track span').textContent = text;
+          strip.innerHTML = '<span class="commercial-promo-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 7h12v11H3zM15 11h4l3 3v4h-7zM7 18a2 2 0 1 0 4 0m6 0a2 2 0 1 0 4 0"/></svg></span><div class="commercial-promo-window"><div class="commercial-promo-track"></div></div><span class="commercial-promo-spark" aria-hidden="true">✦</span>';
+          const track = strip.querySelector('.commercial-promo-track');
+          [...announcements, ...announcements].forEach((message, index) => {
+            const item = document.createElement('span');
+            item.className = index >= announcements.length ? 'promo-copy' : 'promo-message';
+            if (index >= announcements.length) item.setAttribute('aria-hidden', 'true');
+            item.textContent = message;
+            track.append(item);
+          });
           const placement = anchor.classList.contains('commerce-header') && anchor.nextElementSibling?.classList.contains('currency-toolbar') ? anchor.nextElementSibling : anchor;
           if (anchor.classList.contains('commerce-header')) placement.insertAdjacentElement('afterend', strip);
           else anchor.insertAdjacentElement('beforebegin', strip);
           const tickerWindow = strip.querySelector('.commercial-promo-window');
           const sizeTicker = () => {
             const frameWidth = tickerWindow.clientWidth;
-            const textWidth = tickerWindow.querySelector('span').getBoundingClientRect().width;
+            const textWidth = track.scrollWidth / 2;
             strip.style.setProperty('--commercial-frame-width', `${frameWidth}px`);
             strip.style.setProperty('--commercial-scroll-duration', `${Math.max(16, Math.min(180, (frameWidth + textWidth) / 65))}s`);
           };

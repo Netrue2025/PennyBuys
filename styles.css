@@ -165,3 +165,4 @@ body{font-family:'Market Sans',Arial,sans-serif;font-size:14px;color:#191919;bac
 .quick-add.is-added{background:#267448!important;color:#fff!important;border-color:#267448!important}.quick-add.is-added::after{content:'\2713';margin-left:6px;font-weight:700}.cart-line h4 a:hover{text-decoration:underline;color:#3665f3}
 
 .product-name a{display:inline-block;transition:color .16s ease}.product-name a:hover{color:#365fe8}.product-name a.is-opening{animation:product-name-tap .19s ease-in-out}@keyframes product-name-tap{50%{transform:scale(.95);opacity:.58}}@media(prefers-reduced-motion:reduce){.product-name a{transition:none}.product-name a.is-opening{animation:none}}
+.footer-wordmark{width:145px}.footer-wordmark img{width:100%}@media(max-width:720px){.footer-wordmark{width:120px}}

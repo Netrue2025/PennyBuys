@@ -50,7 +50,7 @@ function renderProducts(products){
   document.querySelector('#nav-product-count').textContent=products.length;
   const query=(document.querySelector('#product-search')?.value||'').trim().toLocaleLowerCase('en-GB');
   const filtered=products.filter(product=>!query||`${product.name} ${product.category} ${product.group||''} ${product.description||''}`.toLocaleLowerCase('en-GB').includes(query));
-  productList.innerHTML=filtered.length?filtered.map(product=>`<article class="inventory-card"><img src="${escapeHTML(product.image)}" alt="" loading="lazy"><div><h3>${escapeHTML(product.name)}</h3><p>${escapeHTML(product.category)}${product.video?' | video':''}</p><small>Stock: ${Number(product.inventory??0)} | ${Number(product.gallery?.length||0)+1} image${product.gallery?.length?'s':''}</small></div><strong>GBP ${Number(product.price).toFixed(2)}</strong><div class="inventory-actions"><button class="quiet-button" type="button" data-edit-id="${escapeHTML(product.id)}" aria-label="Edit ${escapeHTML(product.name)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 16.5-.8 4.3 4.3-.8L20 7.5 16.5 4zM14.8 5.7l3.5 3.5"/></svg><span>Edit</span></button><button class="delete-button" type="button" data-delete-id="${escapeHTML(product.id)}" aria-label="Delete ${escapeHTML(product.name)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M6 7l1 14h10l1-14M9 7V4h6v3"/></svg><span>Delete</span></button></div></article>`).join(''):'<div class="inventory-empty">'+(products.length?'No products match that search. Try another name or category.':'No products yet.')+'</div>';
+  productList.innerHTML=filtered.length?filtered.map(product=>`<article class="inventory-card"><img src="${escapeHTML(product.image)}" alt="" loading="lazy"><div><h3>${escapeHTML(product.name)}</h3><p>${escapeHTML(product.category)}${product.video?' | video':''}</p><small>Stock: ${Number(product.inventory??0)} | ${Number(product.weightKg??0.5)} kg | ${product.freeDelivery?'Free delivery | ':''}${Number(product.gallery?.length||0)+1} image${product.gallery?.length?'s':''}</small></div><strong>GBP ${Number(product.price).toFixed(2)}</strong><div class="inventory-actions"><button class="quiet-button" type="button" data-edit-id="${escapeHTML(product.id)}" aria-label="Edit ${escapeHTML(product.name)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 16.5-.8 4.3 4.3-.8L20 7.5 16.5 4zM14.8 5.7l3.5 3.5"/></svg><span>Edit</span></button><button class="delete-button" type="button" data-delete-id="${escapeHTML(product.id)}" aria-label="Delete ${escapeHTML(product.name)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M6 7l1 14h10l1-14M9 7V4h6v3"/></svg><span>Delete</span></button></div></article>`).join(''):'<div class="inventory-empty">'+(products.length?'No products match that search. Try another name or category.':'No products yet.')+'</div>';
   window.dispatchEvent(new CustomEvent('pennybuys:adminproductschange',{detail:{products}}));
 }
 async function loadProducts(){renderProducts(await api('/api/products'));}
@@ -87,6 +87,8 @@ async function loadCommercials(){
     form.elements.deliveryEnabled.checked=config.freeDelivery?.enabled===true;
     form.elements.deliveryTitle.value=config.freeDelivery?.title||'';
     form.elements.itemCount.value=config.freeDelivery?.itemCount||3;
+    form.elements.weightDeliveryEnabled.checked=config.weightDelivery?.enabled===true;
+    form.elements.ratePerKg.value=config.weightDelivery?.ratePerKg??0;
     form.elements.announcements.value=Array.isArray(config.announcements)?config.announcements.join('\n'):'';
     message.textContent='';
   }catch(error){message.textContent=error.message;}
@@ -126,6 +128,8 @@ function editProduct(product){
   productForm.elements.name.value=product.name||'';
   productForm.elements.price.value=product.price??'';
   productForm.elements.inventory.value=product.inventory??0;
+  productForm.elements.weightKg.value=product.weightKg??0.5;
+  productForm.elements.freeDelivery.checked=product.freeDelivery===true;
   productForm.elements.description.value=product.description||'';
   productForm.elements.deliveryReturns.value=product.deliveryReturns||'';
   const categorySelect=productForm.elements.category;
@@ -169,7 +173,7 @@ document.querySelector('#commercials-form').addEventListener('submit',async even
   const message=document.querySelector('#commercials-message');
   const submit=form.querySelector('[type="submit"]');
   submit.disabled=true;message.textContent='Saving commercial settings...';message.classList.remove('success');
-  const body={discount:{enabled:form.elements.discountEnabled.checked,title:form.elements.discountTitle.value.trim(),percent:Number(form.elements.discountPercent.value),intervalMinutes:Number(form.elements.intervalMinutes.value)},freeDelivery:{enabled:form.elements.deliveryEnabled.checked,title:form.elements.deliveryTitle.value.trim(),itemCount:Number(form.elements.itemCount.value)},announcements:form.elements.announcements.value.split(/\r?\n/).map(message=>message.trim()).filter(Boolean)};
+  const body={discount:{enabled:form.elements.discountEnabled.checked,title:form.elements.discountTitle.value.trim(),percent:Number(form.elements.discountPercent.value),intervalMinutes:Number(form.elements.intervalMinutes.value)},freeDelivery:{enabled:form.elements.deliveryEnabled.checked,title:form.elements.deliveryTitle.value.trim(),itemCount:Number(form.elements.itemCount.value)},weightDelivery:{enabled:form.elements.weightDeliveryEnabled.checked,ratePerKg:Number(form.elements.ratePerKg.value)},announcements:form.elements.announcements.value.split(/\r?\n/).map(message=>message.trim()).filter(Boolean)};
   try{await api('/api/admin/commercials',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});message.textContent='Commercial settings saved.';message.classList.add('success');window.dispatchEvent(new Event('pennybuys:commercialschanged'));}
   catch(error){message.textContent=error.message;}
   finally{submit.disabled=false;}

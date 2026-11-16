@@ -11,6 +11,7 @@ const lines=bag.map(line=>({product:products.find(product=>product.id===line.id)
 const subtotal=lines.reduce((sum,line)=>sum+line.product.price*line.qty,0);
 const itemCount=lines.reduce((sum,line)=>sum+line.qty,0);
 let freeDeliveryCount=0;
+let deliveryConfig={};
 let activeOffer=null;
 let promotionsPromise=Promise.resolve();
 const empty=document.querySelector('#checkout-empty');
@@ -18,7 +19,8 @@ const content=document.querySelector('#checkout-content');
 if(!lines.length){empty.hidden=false;}else{
   content.hidden=false;
   function renderCheckoutPrices(){
-    const delivery=subtotal>=35||(freeDeliveryCount>0&&itemCount>=freeDeliveryCount)?0:3.95;
+    const deliveryInfo=window.PennyBuysDelivery.calculate(lines,itemCount?deliveryConfig:{},itemCount,freeDeliveryCount);
+    const delivery=deliveryInfo.amount;
     const discount=activeOffer?Math.round(subtotal*Math.min(90,Number(activeOffer.percent)||0))/100:0;
     document.querySelector('#checkout-items').innerHTML=lines.map(({product,qty})=>`<div class="checkout-item"><img src="${escapeHTML(product.image)}" alt="${escapeHTML(product.alt)}"><div><b>${escapeHTML(product.name)}</b><small>Qty ${qty}</small></div><strong>${money(product.price*qty)}</strong></div>`).join('');
     document.querySelector('#checkout-subtotal').textContent=money(subtotal);
@@ -26,13 +28,15 @@ if(!lines.length){empty.hidden=false;}else{
     document.querySelector('#checkout-discount-label').textContent=activeOffer?`${activeOffer.title} · You save`:'Saved offer';
     document.querySelector('#checkout-discount').textContent=discount?`−${money(discount)}`:'';
     document.querySelector('#checkout-delivery').textContent=delivery?money(delivery):'Free';
+    document.querySelector('#checkout-delivery-label').textContent=deliveryInfo.label;
     document.querySelector('#checkout-total').textContent=money(Math.max(0,subtotal-discount)+delivery);
-    document.querySelector('#checkout-summary-note').textContent=freeDeliveryCount?`Free delivery on orders over £35 or when you pick ${freeDeliveryCount} items.`:'Free UK delivery on orders over £35.';
+    document.querySelector('#checkout-summary-note').textContent=deliveryInfo.weightPricing?`Basket weight ${deliveryInfo.allWeight.toFixed(2)} kg · ${deliveryInfo.chargeableWeight.toFixed(2)} kg charged at ${money(deliveryInfo.rate)}/kg.`:freeDeliveryCount?`Free delivery on orders over £35 or when you pick ${freeDeliveryCount} items.`:'Free UK delivery on orders over £35.';
   }
   renderCheckoutPrices();
   window.addEventListener('pennybuys:currencychange',renderCheckoutPrices);
   promotionsPromise=Promise.all([fetch('/api/commercials/active',{cache:'no-store'}),fetch('/api/account/offers',{cache:'no-store'})]).then(async([campaignResponse,offerResponse])=>{
     const campaign=campaignResponse.ok?await campaignResponse.json():{};
+    deliveryConfig=campaign;
     const saved=offerResponse.ok?await offerResponse.json():{};
     freeDeliveryCount=campaign.freeDelivery?.enabled?Math.max(1,Number(campaign.freeDelivery.itemCount)||3):0;
     activeOffer=(saved.offers||[]).find(offer=>offer.status==='accepted')||null;
@@ -54,7 +58,8 @@ document.querySelector('#checkout-form').addEventListener('submit',async event=>
     }
     const data=Object.fromEntries(new FormData(event.currentTarget).entries());
     const now=new Date().toISOString();
-    const delivery=subtotal>=35||(freeDeliveryCount>0&&itemCount>=freeDeliveryCount)?0:3.95;
+    const deliveryInfo=window.PennyBuysDelivery.calculate(lines,deliveryConfig,itemCount,freeDeliveryCount);
+    const delivery=deliveryInfo.amount;
     const discount=activeOffer?Math.round(subtotal*Math.min(90,Number(activeOffer.percent)||0))/100:0;
     const order={
       id:`PB-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${Math.random().toString(36).slice(2,6).toUpperCase()}`,
@@ -62,8 +67,8 @@ document.querySelector('#checkout-form').addEventListener('submit',async event=>
       customer:{name:data.name.trim(),email:data.email.trim(),phone:data.phone.trim()},
       address:{line1:data.address.trim(),line2:data.address2.trim(),city:data.city.trim(),postcode:data.postcode.trim(),country:'United Kingdom'},
       paymentMethod:data.payment,
-      items:lines.map(({product,qty})=>({id:product.id,name:product.name,image:product.image,price:product.price,qty})),
-      subtotal,discount,offerTitle:activeOffer?.title||'',delivery,total:Math.max(0,subtotal-discount)+delivery,
+      items:lines.map(({product,qty})=>({id:product.id,name:product.name,image:product.image,price:product.price,qty,weightKg:Number(product.weightKg)||0.5,freeDelivery:product.freeDelivery===true})),
+      subtotal,discount,offerTitle:activeOffer?.title||'',delivery,deliveryWeightKg:deliveryInfo.allWeight,chargeableDeliveryWeightKg:deliveryInfo.chargeableWeight,total:Math.max(0,subtotal-discount)+delivery,
       history:[{status:'processing',at:now}]
     };
     const orders=readOrders();orders.unshift(order);localStorage.setItem(ordersKey,JSON.stringify(orders));localStorage.removeItem(bagKey);

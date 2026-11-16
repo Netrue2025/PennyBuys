@@ -248,8 +248,8 @@ app.get('/api/commercials/active', async (_req, res) => {
   try {
     const collection = await getCommercialsCollection();
     const config = collection ? await collection.findOne({ key: 'active' }, { projection: { _id: 0, key: 0 } }) : null;
-    res.set('Cache-Control', 'no-store').json(config || { discount: { enabled: false }, freeDelivery: { enabled: false, itemCount: 3 }, announcements: [] });
-  } catch (error) { console.warn('Commercials could not be loaded:', error.message); res.json({ discount: { enabled: false }, freeDelivery: { enabled: false, itemCount: 3 }, announcements: [] }); }
+    res.set('Cache-Control', 'no-store').json(config || { discount: { enabled: false }, freeDelivery: { enabled: false, itemCount: 3 }, weightDelivery: { enabled: false, ratePerKg: 0 }, announcements: [] });
+  } catch (error) { console.warn('Commercials could not be loaded:', error.message); res.json({ discount: { enabled: false }, freeDelivery: { enabled: false, itemCount: 3 }, weightDelivery: { enabled: false, ratePerKg: 0 }, announcements: [] }); }
 });
 
 app.get('/api/account/offers', async (req, res) => {
@@ -297,7 +297,7 @@ app.get('/api/admin/commercials', requireAdmin, async (_req, res) => {
     const collection = await getCommercialsCollection();
     if (!collection) return res.status(503).json({ error: 'MongoDB is not configured.' });
     const config = await collection.findOne({ key: 'active' }, { projection: { _id: 0, key: 0 } });
-    res.json(config || { discount: { enabled: false, offerId: crypto.randomUUID(), title: '', percent: 10, intervalMinutes: 1440 }, freeDelivery: { enabled: false, itemCount: 3, title: '' }, announcements: [] });
+    res.json(config || { discount: { enabled: false, offerId: crypto.randomUUID(), title: '', percent: 10, intervalMinutes: 1440 }, freeDelivery: { enabled: false, itemCount: 3, title: '' }, weightDelivery: { enabled: false, ratePerKg: 0 }, announcements: [] });
   } catch (error) { res.status(503).json({ error: 'Commercial settings could not be loaded.' }); }
 });
 
@@ -310,6 +310,7 @@ app.put('/api/admin/commercials', requireAdmin, async (req, res) => {
     key: 'active', updatedAt: new Date(),
     discount: { enabled: discountIn.enabled === true, offerId: crypto.randomUUID(), title: String(discountIn.title || 'A little something for you').trim().slice(0, 100), percent: Math.min(90, Math.max(1, Number(discountIn.percent) || 10)), intervalMinutes: Math.min(43200, Math.max(1, Math.floor(Number(discountIn.intervalMinutes) || (Number(discountIn.intervalHours) || 24) * 60))) },
     freeDelivery: { enabled: deliveryIn.enabled === true, itemCount: Math.min(50, Math.max(1, Math.floor(Number(deliveryIn.itemCount) || 3))), title: String(deliveryIn.title || '').trim().slice(0, 100) },
+    weightDelivery: { enabled: req.body?.weightDelivery?.enabled === true, ratePerKg: Math.min(10000, Math.max(0, Number(req.body?.weightDelivery?.ratePerKg) || 0)) },
     announcements
   };
   try {
@@ -485,6 +486,8 @@ app.post('/api/products', requireAdmin, upload.fields([{ name: 'images', maxCoun
   const deliveryReturns = String(req.body.deliveryReturns || '').trim();
   const price = Number(req.body.price);
   const inventory = Number(req.body.inventory);
+  const weightKg = Number(req.body.weightKg);
+  const freeDelivery = req.body.freeDelivery === 'true';
   const images = req.files?.images || [];
   const video = req.files?.video?.[0];
 
@@ -492,6 +495,7 @@ app.post('/api/products', requireAdmin, upload.fields([{ name: 'images', maxCoun
   if (!category || !group) return res.status(400).json({ error: 'Choose a product category.' });
   if (!Number.isFinite(price) || price <= 0 || price > 100000) return res.status(400).json({ error: 'Enter a valid product price.' });
   if (!Number.isInteger(inventory) || inventory < 0 || inventory > 1000000) return res.status(400).json({ error: 'Enter stock as a whole number from 0 to 1,000,000.' });
+  if (!Number.isFinite(weightKg) || weightKg <= 0 || weightKg > 10000) return res.status(400).json({ error: 'Enter a product weight greater than 0 kg and no more than 10,000 kg.' });
   if (!description || description.length > 3000) return res.status(400).json({ error: 'Add a product description under 3,000 characters.' });
   if (deliveryReturns.length > 2000) return res.status(400).json({ error: 'Keep delivery and returns information under 2,000 characters.' });
   if (!images.length) return res.status(400).json({ error: 'Choose at least one product image.' });
@@ -515,7 +519,7 @@ app.post('/api/products', requireAdmin, upload.fields([{ name: 'images', maxCoun
     const id = existing.some(item => item.id === baseId) ? `${baseId}-${Date.now().toString(36)}` : baseId;
     const now = new Date();
     const product = {
-      id, name, category, group, price,
+      id, name, category, group, price, weightKg, freeDelivery,
       oldPrice: null,
       badge: 'JUST ARRIVED', rating: '5.0', reviews: 0,
       image: imageAssets[0].secure_url,
@@ -544,12 +548,15 @@ app.put('/api/products/:id', requireAdmin, upload.fields([{ name: 'images', maxC
   const deliveryReturns = String(req.body.deliveryReturns || '').trim();
   const price = Number(req.body.price);
   const inventory = Number(req.body.inventory);
+  const weightKg = Number(req.body.weightKg);
+  const freeDelivery = req.body.freeDelivery === 'true';
   const images = req.files?.images || [];
   const video = req.files?.video?.[0];
   if (name.length < 2 || name.length > 140) return res.status(400).json({ error: 'Product name must be between 2 and 140 characters.' });
   if (!category || !group) return res.status(400).json({ error: 'Choose a product category.' });
   if (!Number.isFinite(price) || price <= 0 || price > 100000) return res.status(400).json({ error: 'Enter a valid product price.' });
   if (!Number.isInteger(inventory) || inventory < 0 || inventory > 1000000) return res.status(400).json({ error: 'Enter stock as a whole number from 0 to 1,000,000.' });
+  if (!Number.isFinite(weightKg) || weightKg <= 0 || weightKg > 10000) return res.status(400).json({ error: 'Enter a product weight greater than 0 kg and no more than 10,000 kg.' });
   if (!description || description.length > 3000) return res.status(400).json({ error: 'Add a product description under 3,000 characters.' });
   if (deliveryReturns.length > 2000) return res.status(400).json({ error: 'Keep delivery and returns information under 2,000 characters.' });
   if ((images.length || video) && !process.env.CLOUDINARY_URL && !(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET)) {
@@ -568,7 +575,7 @@ app.put('/api/products/:id', requireAdmin, upload.fields([{ name: 'images', maxC
     const previous = existingRecord || getDemoProducts().find(product => product.id === req.params.id);
     if (!previous) return res.status(404).json({ error: 'Product not found.' });
     const now = new Date();
-    const changes = { name, category, group, description, deliveryReturns, price, inventory, alt: name, updatedAt: now };
+    const changes = { name, category, group, description, deliveryReturns, price, inventory, weightKg, freeDelivery, alt: name, updatedAt: now };
     let oldImageIds = [];
     let oldVideoIds = [];
     let imagePlan;

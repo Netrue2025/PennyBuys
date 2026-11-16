@@ -48,6 +48,7 @@ else{
   document.querySelector('#detail-rating').textContent=product.rating;
   document.querySelector('#detail-reviews').textContent=`(${product.reviews} reviews)`;
   document.querySelector('#detail-price').innerHTML=`${money(product.price)} ${product.oldPrice?`<del>${money(product.oldPrice)}</del>`:''}`;
+  if(product.freeDelivery===true){const deliveryNote=document.querySelector('.detail-service p');if(deliveryNote)deliveryNote.innerHTML='<b>Free delivery</b> on this product';}
   const details={
     crossbody:{description:'Your new everyday companion: a lovely, easy-to-style crossbody with room for the things you like to keep close.',points:['Comfortable adjustable shoulder strap','Secure main compartment','Lightweight for all-day wear'],care:'Wipe gently with a soft, damp cloth. Allow to air dry.'},
     'jewellery-case':{description:'Keep your little treasures together at home and away with this compact, thoughtfully arranged jewellery case.',points:['Compact travel-friendly shape','Separate spaces for small pieces','A thoughtful gift for someone special'],care:'Keep dry and wipe clean with a soft cloth.'},
