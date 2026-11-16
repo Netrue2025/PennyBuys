@@ -41,12 +41,12 @@ async function api(path,options={}){
 function renderProducts(products){
   catalogProducts=products;
   productCount.textContent=products.length;
-  productList.innerHTML=products.length?products.map(product=>`<article class="inventory-card"><img src="${escapeHTML(product.image)}" alt="" loading="lazy"><div><h3>${escapeHTML(product.name)}</h3><p>${escapeHTML(product.category)}${product.video?' | video':''}</p><small>Stock: ${Number(product.inventory??0)} | ${Number(product.gallery?.length||0)+1} image${product.gallery?.length?'s':''}</small></div><strong>GBP ${Number(product.price).toFixed(2)}</strong><div class="inventory-actions"><button class="quiet-button" type="button" data-edit-id="${escapeHTML(product.id)}">Edit</button><button class="delete-button" type="button" data-delete-id="${escapeHTML(product.id)}">Delete</button></div></article>`).join(''):'<div class="inventory-empty">No products are available yet.</div>';
+  productList.innerHTML=products.length?products.map(product=>`<article class="inventory-card"><img src="${escapeHTML(product.image)}" alt="" loading="lazy"><div><h3>${escapeHTML(product.name)}</h3><p>${escapeHTML(product.category)}${product.video?' | video':''}</p><small>Stock: ${Number(product.inventory??0)} | ${Number(product.gallery?.length||0)+1} image${product.gallery?.length?'s':''}</small></div><strong>GBP ${Number(product.price).toFixed(2)}</strong><div class="inventory-actions"><button class="quiet-button" type="button" data-edit-id="${escapeHTML(product.id)}" aria-label="Edit ${escapeHTML(product.name)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 16.5-.8 4.3 4.3-.8L20 7.5 16.5 4zM14.8 5.7l3.5 3.5"/></svg><span>Edit</span></button><button class="delete-button" type="button" data-delete-id="${escapeHTML(product.id)}" aria-label="Delete ${escapeHTML(product.name)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M6 7l1 14h10l1-14M9 7V4h6v3"/></svg><span>Delete</span></button></div></article>`).join(''):'<div class="inventory-empty">No products yet.</div>';
 }
 async function loadProducts(){renderProducts(await api('/api/products'));}
 async function loadSubscribers(){
   subscriberMessage.textContent='Loading subscribers...';
-  try{const data=await api('/api/admin/newsletter-subscriptions');const subscriptions=data.subscriptions||[];subscriberCount.textContent=subscriptions.length;subscriberList.innerHTML=subscriptions.length?subscriptions.map(item=>`<article class="subscriber-row"><a href="mailto:${encodeURIComponent(item.email)}">${escapeHTML(item.email)}</a><time>${item.subscribedAt?new Date(item.subscribedAt).toLocaleDateString('en-GB'):'?'}</time></article>`).join(''):'<div class="inventory-empty">No newsletter subscribers yet.</div>';subscriberMessage.textContent='';}
+  try{const data=await api('/api/admin/newsletter-subscriptions');const subscriptions=data.subscriptions||[];subscriberCount.textContent=subscriptions.length;document.querySelector('#nav-subscriber-count').textContent=subscriptions.length;subscriberList.innerHTML=subscriptions.length?subscriptions.map(item=>`<article class="subscriber-row"><a href="mailto:${encodeURIComponent(item.email)}">${escapeHTML(item.email)}</a><time>${item.subscribedAt?new Date(item.subscribedAt).toLocaleDateString('en-GB'):'?'}</time></article>`).join(''):'<div class="inventory-empty">No newsletter subscribers yet.</div>';subscriberMessage.textContent='';}
   catch(error){subscriberList.replaceChildren();subscriberMessage.textContent=error.message;}
 }
 async function connectAdmin(candidate){
@@ -119,20 +119,37 @@ document.querySelector('#refresh-products').addEventListener('click',async event
   event.currentTarget.disabled=false;
 });
 document.querySelector('#cancel-edit').addEventListener('click',cancelEdit);
+let pendingDeleteProduct=null;
+const deleteDialog=document.querySelector('#delete-product-dialog');
+const confirmDeleteButton=document.querySelector('#confirm-delete-product');
 productList.addEventListener('click',async event=>{
   const editButton=event.target.closest('[data-edit-id]');
   if(editButton){const product=catalogProducts.find(item=>item.id===editButton.dataset.editId);if(product)editProduct(product);return;}
   const deleteButton=event.target.closest('[data-delete-id]');
   if(!deleteButton)return;
   const product=catalogProducts.find(item=>item.id===deleteButton.dataset.deleteId);
-  if(!product||!window.confirm(`Delete "${product.name}" from the catalog?`))return;
-  deleteButton.disabled=true;
+  if(!product)return;
+  pendingDeleteProduct=product;
+  document.querySelector('#delete-product-name').textContent=product.name;
+  document.querySelector('#delete-message').textContent='';
+  deleteDialog.showModal();
+});
+confirmDeleteButton.addEventListener('click',async()=>{
+  const product=pendingDeleteProduct;
+  if(!product)return;
+  confirmDeleteButton.disabled=true;
+  document.querySelector('#delete-message').textContent='Deleting product...';
   try{
     const response=await api(`/api/products/${encodeURIComponent(product.id)}`,{method:'DELETE'});
     if(editingId===product.id)cancelEdit();
     renderProducts(response.products);productMessage.textContent=`${product.name} was deleted.`;productMessage.classList.add('success');
-  }catch(error){productMessage.textContent=error.message;deleteButton.disabled=false;}
+    deleteDialog.close();
+  }catch(error){document.querySelector('#delete-message').textContent=error.message;}
+  finally{confirmDeleteButton.disabled=false;}
 });
+deleteDialog.addEventListener('close',()=>{pendingDeleteProduct=null});
+document.querySelectorAll('.admin-workflow a').forEach(link=>link.addEventListener('click',()=>{document.querySelectorAll('.admin-workflow a').forEach(item=>item.removeAttribute('aria-current'));link.setAttribute('aria-current','location')}));
+if('IntersectionObserver'in window){const sectionObserver=new IntersectionObserver(entries=>entries.forEach(entry=>{if(!entry.isIntersecting)return;const link=document.querySelector(`.admin-workflow a[href="#${entry.target.id}"]`);if(link){document.querySelectorAll('.admin-workflow a').forEach(item=>item.removeAttribute('aria-current'));link.setAttribute('aria-current','location')}}),{rootMargin:'-18% 0px -68% 0px'});['inventory-section','product-editor','newsletter-subscribers'].forEach(id=>{const section=document.getElementById(id);if(section)sectionObserver.observe(section)})}
 productForm.elements.category.addEventListener('change',event=>{
   productForm.elements.group.value=event.currentTarget.selectedOptions[0]?.dataset.group||'';
 });

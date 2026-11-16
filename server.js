@@ -196,6 +196,17 @@ app.get('/api/admin/newsletter-subscriptions', requireAdmin, async (_req, res) =
   } catch (error) { console.error('Newsletter subscriptions could not be loaded:', error.message); res.status(503).json({ error: 'Newsletter subscriptions could not be loaded. Check the MongoDB connection.' }); }
 });
 
+app.post('/api/newsletter/unsubscribe', async (req, res) => {
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) return res.status(400).json({ error: 'Enter the email address you subscribed with.' });
+  try {
+    await getProductsCollection();
+    if (!client) return res.status(503).json({ error: 'Unsubscribe is temporarily unavailable. Please try again later.' });
+    await client.db(mongoDbName).collection('newsletterSubscriptions').deleteOne({ email, status: 'subscribed' });
+    res.json({ ok: true });
+  } catch (error) { console.error('Newsletter unsubscribe failed:', error.message); res.status(503).json({ error: 'We could not update your subscription right now. Please try again later.' }); }
+});
+
 app.get('/api/products/:id/reviews', async (req, res) => {
   try {
     const products = await getStoreProducts();
