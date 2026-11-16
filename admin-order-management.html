@@ -7,6 +7,11 @@
   <title>Admin dashboard - PennyBuys</title>
   <link rel="stylesheet" href="admin-products.css">
   <link rel="stylesheet" href="admin-dashboard.css">
+  <link rel="icon" type="image/png" href="/Media/pennybuys-logo.png?v=20261116">
+  <meta property="og:image" content="https://pennybuys.co.uk/Media/pennybuys-logo.png">
+  <meta property="og:image:alt" content="PennyBuys shopping logo">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://pennybuys.co.uk/Media/pennybuys-logo.png">
 </head>
 <body class="admin-app-page" data-admin-page="orders">
   <header class="admin-topbar">
@@ -59,7 +64,7 @@
             <div id="product-list" class="product-list"></div><div id="product-search-empty" class="inventory-empty" hidden>No products match that search. Try a different name or category.</div>
           </section>
           <section id="order-section" class="dashboard-section orders-section">
-            <div class="inventory-heading"><div><p class="eyebrow">FULFILMENT DESK</p><h2>Orders <span id="order-count">0</span></h2></div><button id="refresh-orders" class="quiet-button icon-text-button" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14-5L4 8M4 4v4h4M4 13a8 8 0 0 0 14 5l2-2M20 20v-4h-4"/></svg><span>Refresh</span></button></div>
+            <div class="inventory-heading"><div><p class="eyebrow">FULFILMENT DESK</p><h2>Orders <span id="order-count">0</span></h2></div><div class="order-history-tools"><label><input id="select-all-orders" type="checkbox"> Select all</label><span id="selected-order-count">0 selected</span><button id="delete-selected-orders" class="delete-button" type="button" disabled>Delete selected</button><button id="refresh-orders" class="quiet-button icon-text-button" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14-5L4 8M4 4v4h4M4 13a8 8 0 0 0 14 5l2-2M20 20v-4h-4"/></svg><span>Refresh</span></button></div></div>
             <div id="admin-demo-note" class="demo-notice">Demo order data is stored in this browser and shared with the customer status page on this device.</div><div id="admin-orders-list" class="admin-orders-list"></div><div id="admin-no-orders" class="commerce-empty" hidden><h3>No orders to show yet</h3><p>New checkout orders will appear here for delivery updates.</p><a class="primary-button" href="catalog.html">Browse storefront</a></div>
           </section>
           <section id="review-section" class="dashboard-section admin-panel admin-reviews-section"><div class="inventory-heading"><div><p class="eyebrow">CUSTOMER FEEDBACK</p><h2>Product reviews <span id="admin-review-count">0</span></h2><p class="admin-reviews-intro">Review the latest feedback and remove anything that should not appear in your shop.</p></div><button id="refresh-reviews" class="quiet-button icon-text-button" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14-5L4 8M4 4v4h4M4 13a8 8 0 0 0 14 5l2-2M20 20v-4h-4"/></svg><span>Refresh</span></button></div><p id="admin-review-message" class="form-message" role="status" aria-live="polite"></p><div id="admin-review-list" class="admin-review-list"></div></section>
@@ -95,6 +100,7 @@
     </div>
   </main>
   <dialog id="delete-product-dialog" class="admin-dialog"><form method="dialog"><span class="dialog-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6m4-6v6M6 7l1 14h10l1-14M9 7V4h6v3"/></svg></span><h2>Delete this product?</h2><p id="delete-product-name"></p><p id="delete-message" role="status" aria-live="polite"></p><div class="dialog-actions"><button class="quiet-button" value="cancel">Keep product</button><button id="confirm-delete-product" class="delete-button" type="button">Delete product</button></div></form></dialog>
+  <dialog id="delete-orders-dialog" class="admin-dialog"><form method="dialog"><span class="dialog-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6m4-6v6M6 7l1 14h10l1-14M9 7V4h6v3"/></svg></span><h2>Delete selected order history?</h2><p id="delete-orders-message">This removes the selected orders from this browser.</p><div class="dialog-actions"><button class="quiet-button" value="cancel">Keep orders</button><button id="confirm-delete-orders" class="delete-button" type="button">Delete orders</button></div></form></dialog>
   <dialog id="order-update-dialog" class="admin-dialog"><form method="dialog"><span class="dialog-icon order-dialog-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg></span><h2>Order updated</h2><p id="order-update-modal-message">The customer status page now shows your update.</p><div class="dialog-actions"><button class="primary-button" value="ok">Done</button></div></form></dialog>
   <script src="admin-orders.js"></script>
   <script src="admin-pages.js"></script>
