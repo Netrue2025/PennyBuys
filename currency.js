@@ -68,21 +68,7 @@
       emitChange();
     });
     if (utilityBar && utilityLinks) {
-      const toolbar = document.createElement('div');
-      toolbar.className = 'currency-toolbar';
-      toolbar.append(label);
-      const mobile = window.matchMedia('(max-width: 720px)');
-      const placeSelector = () => {
-        if (mobile.matches) {
-          if (label.parentElement !== toolbar) toolbar.append(label);
-          if (!toolbar.isConnected) utilityBar.insertAdjacentElement('afterend', toolbar);
-        } else {
-          if (toolbar.isConnected) toolbar.remove();
-          if (label.parentElement !== utilityLinks) utilityLinks.append(label);
-        }
-      };
-      placeSelector();
-      mobile.addEventListener?.('change', placeSelector);
+      utilityLinks.append(label);
     } else if (commerceHeader) {
       const toolbar = document.createElement('div');
       toolbar.className = 'currency-toolbar';
@@ -157,17 +143,31 @@
       if (!response.ok) return;
       const config = await response.json();
       const promotion = config.freeDelivery;
-      if (promotion?.enabled && (location.pathname.endsWith('index.html') || location.pathname === '/' || location.pathname.endsWith('catalog.html'))) {
-        const anchor = document.querySelector('.hero, .catalog-intro, .catalog-main');
+      const announcements = Array.isArray(config.announcements) ? config.announcements.map(item => String(item || '').trim()).filter(Boolean) : [];
+      if (promotion?.enabled) announcements.unshift(promotion.title || `Pick ${Math.max(1, Number(promotion.itemCount) || 3)} items for free delivery`);
+      if (announcements.length) {
+        const anchor = document.querySelector('.hero, .catalog-intro, .catalog-main') || document.querySelector('.commerce-header');
         if (anchor && !document.querySelector('.commercial-promo-strip')) {
           const strip = document.createElement('aside');
           strip.className = 'commercial-promo-strip';
-          const text = promotion.title || `Pick ${Math.max(1, Number(promotion.itemCount) || 3)} items for free delivery`;
+          const text = announcements.join('   ·   ');
           strip.setAttribute('role', 'note');
           strip.setAttribute('aria-label', text);
-          strip.innerHTML = '<span class="commercial-promo-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 7h12v11H3zM15 11h4l3 3v4h-7zM7 18a2 2 0 1 0 4 0m6 0a2 2 0 1 0 4 0"/></svg></span><div class="commercial-promo-window"><div class="commercial-promo-track"><span></span><span aria-hidden="true"></span></div></div><span class="commercial-promo-spark" aria-hidden="true">✦</span>';
-          strip.querySelectorAll('.commercial-promo-track span').forEach(item => { item.textContent = text; });
-          anchor.insertAdjacentElement('beforebegin', strip);
+          strip.innerHTML = '<span class="commercial-promo-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 7h12v11H3zM15 11h4l3 3v4h-7zM7 18a2 2 0 1 0 4 0m6 0a2 2 0 1 0 4 0"/></svg></span><div class="commercial-promo-window"><div class="commercial-promo-track"><span></span></div></div><span class="commercial-promo-spark" aria-hidden="true">✦</span>';
+          strip.querySelector('.commercial-promo-track span').textContent = text;
+          const placement = anchor.classList.contains('commerce-header') && anchor.nextElementSibling?.classList.contains('currency-toolbar') ? anchor.nextElementSibling : anchor;
+          if (anchor.classList.contains('commerce-header')) placement.insertAdjacentElement('afterend', strip);
+          else anchor.insertAdjacentElement('beforebegin', strip);
+          const tickerWindow = strip.querySelector('.commercial-promo-window');
+          const sizeTicker = () => {
+            const frameWidth = tickerWindow.clientWidth;
+            const textWidth = tickerWindow.querySelector('span').getBoundingClientRect().width;
+            strip.style.setProperty('--commercial-frame-width', `${frameWidth}px`);
+            strip.style.setProperty('--commercial-scroll-duration', `${Math.max(16, Math.min(180, (frameWidth + textWidth) / 65))}s`);
+          };
+          window.requestAnimationFrame(sizeTicker);
+          if ('ResizeObserver' in window) new ResizeObserver(sizeTicker).observe(tickerWindow);
+          else window.addEventListener('resize', sizeTicker);
         }
       }
       const discount = config.discount;

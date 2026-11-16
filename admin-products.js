@@ -25,6 +25,7 @@ let catalogProducts=[];
 let editingId='';
 let mediaItems=[];
 let currentVideoUrl='';
+let serviceStatusTimer;
 const escapeHTML=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 
 function showLogin(message=''){
@@ -86,6 +87,7 @@ async function loadCommercials(){
     form.elements.deliveryEnabled.checked=config.freeDelivery?.enabled===true;
     form.elements.deliveryTitle.value=config.freeDelivery?.title||'';
     form.elements.itemCount.value=config.freeDelivery?.itemCount||3;
+    form.elements.announcements.value=Array.isArray(config.announcements)?config.announcements.join('\n'):'';
     message.textContent='';
   }catch(error){message.textContent=error.message;}
 }
@@ -96,8 +98,12 @@ async function connectAdmin(candidate){
   sessionStorage.setItem(tokenKey,adminToken);
   showDashboard();
   const ready=status.mongoConnected&&status.cloudinaryConfigured;
+  window.clearTimeout(serviceStatusTimer);
+  serviceStatus.hidden=false;
+  serviceStatus.classList.remove('is-disappearing');
   serviceStatus.classList.toggle('ready',ready);
   serviceStatus.innerHTML=`<strong>${ready?'Services ready':'Setup needed'}</strong><span>MongoDB: ${status.mongoConnected?'connected':escapeHTML(status.mongoMessage||'not connected')}</span><span>Cloudinary: ${status.cloudinaryConfigured?'configured':'not configured'}</span>${status.cloudinaryConfigured?'':'<span>Set Cloudinary credentials in your server environment before uploading.</span>'}`;
+  if(ready)serviceStatusTimer=window.setTimeout(()=>{serviceStatus.classList.add('is-disappearing');window.setTimeout(()=>{serviceStatus.hidden=true},420)},6000);
   await loadProducts();
   await loadSubscribers();
   await loadReviews();
@@ -163,7 +169,7 @@ document.querySelector('#commercials-form').addEventListener('submit',async even
   const message=document.querySelector('#commercials-message');
   const submit=form.querySelector('[type="submit"]');
   submit.disabled=true;message.textContent='Saving commercial settings...';message.classList.remove('success');
-  const body={discount:{enabled:form.elements.discountEnabled.checked,title:form.elements.discountTitle.value.trim(),percent:Number(form.elements.discountPercent.value),intervalMinutes:Number(form.elements.intervalMinutes.value)},freeDelivery:{enabled:form.elements.deliveryEnabled.checked,title:form.elements.deliveryTitle.value.trim(),itemCount:Number(form.elements.itemCount.value)}};
+  const body={discount:{enabled:form.elements.discountEnabled.checked,title:form.elements.discountTitle.value.trim(),percent:Number(form.elements.discountPercent.value),intervalMinutes:Number(form.elements.intervalMinutes.value)},freeDelivery:{enabled:form.elements.deliveryEnabled.checked,title:form.elements.deliveryTitle.value.trim(),itemCount:Number(form.elements.itemCount.value)},announcements:form.elements.announcements.value.split(/\r?\n/).map(message=>message.trim()).filter(Boolean)};
   try{await api('/api/admin/commercials',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});message.textContent='Commercial settings saved.';message.classList.add('success');window.dispatchEvent(new Event('pennybuys:commercialschanged'));}
   catch(error){message.textContent=error.message;}
   finally{submit.disabled=false;}

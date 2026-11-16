@@ -248,8 +248,8 @@ app.get('/api/commercials/active', async (_req, res) => {
   try {
     const collection = await getCommercialsCollection();
     const config = collection ? await collection.findOne({ key: 'active' }, { projection: { _id: 0, key: 0 } }) : null;
-    res.set('Cache-Control', 'no-store').json(config || { discount: { enabled: false }, freeDelivery: { enabled: false, itemCount: 3 } });
-  } catch (error) { console.warn('Commercials could not be loaded:', error.message); res.json({ discount: { enabled: false }, freeDelivery: { enabled: false, itemCount: 3 } }); }
+    res.set('Cache-Control', 'no-store').json(config || { discount: { enabled: false }, freeDelivery: { enabled: false, itemCount: 3 }, announcements: [] });
+  } catch (error) { console.warn('Commercials could not be loaded:', error.message); res.json({ discount: { enabled: false }, freeDelivery: { enabled: false, itemCount: 3 }, announcements: [] }); }
 });
 
 app.get('/api/account/offers', async (req, res) => {
@@ -297,17 +297,20 @@ app.get('/api/admin/commercials', requireAdmin, async (_req, res) => {
     const collection = await getCommercialsCollection();
     if (!collection) return res.status(503).json({ error: 'MongoDB is not configured.' });
     const config = await collection.findOne({ key: 'active' }, { projection: { _id: 0, key: 0 } });
-    res.json(config || { discount: { enabled: false, offerId: crypto.randomUUID(), title: '', percent: 10, intervalMinutes: 1440 }, freeDelivery: { enabled: false, itemCount: 3, title: '' } });
+    res.json(config || { discount: { enabled: false, offerId: crypto.randomUUID(), title: '', percent: 10, intervalMinutes: 1440 }, freeDelivery: { enabled: false, itemCount: 3, title: '' }, announcements: [] });
   } catch (error) { res.status(503).json({ error: 'Commercial settings could not be loaded.' }); }
 });
 
 app.put('/api/admin/commercials', requireAdmin, async (req, res) => {
   const discountIn = req.body?.discount || {};
   const deliveryIn = req.body?.freeDelivery || {};
+  const announcementInput = Array.isArray(req.body?.announcements) ? req.body.announcements : String(req.body?.announcements || '').split(/\r?\n/);
+  const announcements = announcementInput.map(message => String(message || '').trim()).filter(Boolean).slice(0, 8).map(message => message.slice(0, 240));
   const config = {
     key: 'active', updatedAt: new Date(),
     discount: { enabled: discountIn.enabled === true, offerId: crypto.randomUUID(), title: String(discountIn.title || 'A little something for you').trim().slice(0, 100), percent: Math.min(90, Math.max(1, Number(discountIn.percent) || 10)), intervalMinutes: Math.min(43200, Math.max(1, Math.floor(Number(discountIn.intervalMinutes) || (Number(discountIn.intervalHours) || 24) * 60))) },
-    freeDelivery: { enabled: deliveryIn.enabled === true, itemCount: Math.min(50, Math.max(1, Math.floor(Number(deliveryIn.itemCount) || 3))), title: String(deliveryIn.title || '').trim().slice(0, 100) }
+    freeDelivery: { enabled: deliveryIn.enabled === true, itemCount: Math.min(50, Math.max(1, Math.floor(Number(deliveryIn.itemCount) || 3))), title: String(deliveryIn.title || '').trim().slice(0, 100) },
+    announcements
   };
   try {
     const collection = await getCommercialsCollection();
