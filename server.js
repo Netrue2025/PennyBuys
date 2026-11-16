@@ -256,7 +256,7 @@ app.get('/api/account/offers', async (req, res) => {
   if (!req.customer) return res.status(401).json({ error: 'Sign in to view your saved offers.' });
   try {
     const collection = await getCommercialsCollection();
-    const offers = collection ? await collection.find({ type: 'customer-offer', email: req.customer.email, status: 'accepted' }, { projection: { _id: 0 } }).sort({ acceptedAt: -1 }).toArray() : [];
+    const offers = collection ? await collection.find({ type: 'customer-offer', email: req.customer.email, status: { $in: ['accepted', 'redeemed'] } }, { projection: { _id: 0 } }).sort({ acceptedAt: -1 }).toArray() : [];
     res.set('Cache-Control', 'no-store').json({ offers });
   } catch (error) { console.error('Customer offers could not be loaded:', error.message); res.status(503).json({ error: 'Saved offers are temporarily unavailable.' }); }
 });
@@ -270,7 +270,7 @@ app.post('/api/account/offers/accept', async (req, res) => {
     const config = await collection.findOne({ key: 'active' }, { projection: { _id: 0 } });
     const discount = config?.discount;
     if (!discount?.enabled || discount.offerId !== offerId) return res.status(409).json({ error: 'This offer is no longer available.' });
-    const existing = await collection.findOne({ type: 'customer-offer', email: req.customer.email, offerId, status: 'accepted' }, { projection: { _id: 0 } });
+    const existing = await collection.findOne({ type: 'customer-offer', email: req.customer.email, offerId, status: { $in: ['accepted', 'redeemed'] } }, { projection: { _id: 0 } });
     if (existing) return res.json({ ok: true, offer: existing, alreadySaved: true });
     const offer = { type: 'customer-offer', email: req.customer.email, offerId, title: String(discount.title || 'PennyBuys offer').slice(0, 100), percent: Math.min(90, Math.max(1, Number(discount.percent) || 1)), status: 'accepted', acceptedAt: new Date(), redeemedAt: null };
     await collection.insertOne(offer);
@@ -297,7 +297,7 @@ app.get('/api/admin/commercials', requireAdmin, async (_req, res) => {
     const collection = await getCommercialsCollection();
     if (!collection) return res.status(503).json({ error: 'MongoDB is not configured.' });
     const config = await collection.findOne({ key: 'active' }, { projection: { _id: 0, key: 0 } });
-    res.json(config || { discount: { enabled: false, offerId: crypto.randomUUID(), title: '', percent: 10, intervalHours: 24 }, freeDelivery: { enabled: false, itemCount: 3, title: '' } });
+    res.json(config || { discount: { enabled: false, offerId: crypto.randomUUID(), title: '', percent: 10, intervalMinutes: 1440 }, freeDelivery: { enabled: false, itemCount: 3, title: '' } });
   } catch (error) { res.status(503).json({ error: 'Commercial settings could not be loaded.' }); }
 });
 
@@ -306,7 +306,7 @@ app.put('/api/admin/commercials', requireAdmin, async (req, res) => {
   const deliveryIn = req.body?.freeDelivery || {};
   const config = {
     key: 'active', updatedAt: new Date(),
-    discount: { enabled: discountIn.enabled === true, offerId: crypto.randomUUID(), title: String(discountIn.title || 'A little something for you').trim().slice(0, 100), percent: Math.min(90, Math.max(1, Number(discountIn.percent) || 10)), intervalHours: Math.min(720, Math.max(1, Number(discountIn.intervalHours) || 24)) },
+    discount: { enabled: discountIn.enabled === true, offerId: crypto.randomUUID(), title: String(discountIn.title || 'A little something for you').trim().slice(0, 100), percent: Math.min(90, Math.max(1, Number(discountIn.percent) || 10)), intervalMinutes: Math.min(43200, Math.max(1, Math.floor(Number(discountIn.intervalMinutes) || (Number(discountIn.intervalHours) || 24) * 60))) },
     freeDelivery: { enabled: deliveryIn.enabled === true, itemCount: Math.min(50, Math.max(1, Math.floor(Number(deliveryIn.itemCount) || 3))), title: String(deliveryIn.title || '').trim().slice(0, 100) }
   };
   try {

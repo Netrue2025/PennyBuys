@@ -82,7 +82,7 @@ async function loadCommercials(){
     form.elements.discountEnabled.checked=config.discount?.enabled===true;
     form.elements.discountTitle.value=config.discount?.title||'';
     form.elements.discountPercent.value=config.discount?.percent||10;
-    form.elements.intervalHours.value=config.discount?.intervalHours||24;
+    form.elements.intervalMinutes.value=config.discount?.intervalMinutes||(Number(config.discount?.intervalHours)||24)*60;
     form.elements.deliveryEnabled.checked=config.freeDelivery?.enabled===true;
     form.elements.deliveryTitle.value=config.freeDelivery?.title||'';
     form.elements.itemCount.value=config.freeDelivery?.itemCount||3;
@@ -163,7 +163,7 @@ document.querySelector('#commercials-form').addEventListener('submit',async even
   const message=document.querySelector('#commercials-message');
   const submit=form.querySelector('[type="submit"]');
   submit.disabled=true;message.textContent='Saving commercial settings...';message.classList.remove('success');
-  const body={discount:{enabled:form.elements.discountEnabled.checked,title:form.elements.discountTitle.value.trim(),percent:Number(form.elements.discountPercent.value),intervalHours:Number(form.elements.intervalHours.value)},freeDelivery:{enabled:form.elements.deliveryEnabled.checked,title:form.elements.deliveryTitle.value.trim(),itemCount:Number(form.elements.itemCount.value)}};
+  const body={discount:{enabled:form.elements.discountEnabled.checked,title:form.elements.discountTitle.value.trim(),percent:Number(form.elements.discountPercent.value),intervalMinutes:Number(form.elements.intervalMinutes.value)},freeDelivery:{enabled:form.elements.deliveryEnabled.checked,title:form.elements.deliveryTitle.value.trim(),itemCount:Number(form.elements.itemCount.value)}};
   try{await api('/api/admin/commercials',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});message.textContent='Commercial settings saved.';message.classList.add('success');window.dispatchEvent(new Event('pennybuys:commercialschanged'));}
   catch(error){message.textContent=error.message;}
   finally{submit.disabled=false;}

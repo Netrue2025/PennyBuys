@@ -162,9 +162,11 @@
         if (anchor && !document.querySelector('.commercial-promo-strip')) {
           const strip = document.createElement('aside');
           strip.className = 'commercial-promo-strip';
+          const text = promotion.title || `Pick ${Math.max(1, Number(promotion.itemCount) || 3)} items for free delivery`;
           strip.setAttribute('role', 'note');
-          strip.innerHTML = `<span class="commercial-promo-mark" aria-hidden="true">&#8599;</span><span><b></b><small>Free delivery when your basket has ${Math.max(1, Number(promotion.itemCount) || 3)} items.</small></span>`;
-          strip.querySelector('b').textContent = promotion.title || `Pick ${Math.max(1, Number(promotion.itemCount) || 3)} items for free delivery`;
+          strip.setAttribute('aria-label', text);
+          strip.innerHTML = '<span class="commercial-promo-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 7h12v11H3zM15 11h4l3 3v4h-7zM7 18a2 2 0 1 0 4 0m6 0a2 2 0 1 0 4 0"/></svg></span><div class="commercial-promo-window"><div class="commercial-promo-track"><span></span><span aria-hidden="true"></span></div></div><span class="commercial-promo-spark" aria-hidden="true">✦</span>';
+          strip.querySelectorAll('.commercial-promo-track span').forEach(item => { item.textContent = text; });
           anchor.insertAdjacentElement('beforebegin', strip);
         }
       }
@@ -172,23 +174,28 @@
       if (!discount?.enabled || !discount.offerId) return;
       if (!['/', '/index.html', '/catalog.html'].includes(location.pathname) && !location.pathname.endsWith('/product.html')) return;
       let customer = null;
-      try { const session = await fetch('/api/auth/session', { cache: 'no-store' }); customer = (await session.json()).user; } catch { return; }
+      try { const session = await fetch('/api/auth/session', { cache: 'no-store' }); if (!session.ok) return; customer = (await session.json()).user || null; } catch { return; }
       if (customer?.email) {
         try {
           const savedResponse = await fetch('/api/account/offers', { cache: 'no-store' });
-          const saved = savedResponse.ok ? await savedResponse.json() : {};
+          if (!savedResponse.ok) return;
+          const saved = await savedResponse.json();
           if ((saved.offers || []).some(offer => offer.offerId === discount.offerId)) return;
         } catch { return; }
       }
       const cadenceKey = `pennybuys-commercial-popup:${discount.offerId}:${customer?.email || 'guest'}`;
-      try { if (Date.now() - Number(localStorage.getItem(cadenceKey) || 0) < Math.max(1, Number(discount.intervalHours) || 24) * 3600000) return; } catch { /* continue without persisted cadence */ }
+      const intervalMinutes = Math.max(1, Number(discount.intervalMinutes) || (Number(discount.intervalHours) || 24) * 60);
+      try { if (Date.now() - Number(localStorage.getItem(cadenceKey) || 0) < intervalMinutes * 60000) return; } catch { /* continue without persisted cadence */ }
       if (document.querySelector('#commercial-offer-dialog')) return;
       const dialog = document.createElement('dialog');
       dialog.id = 'commercial-offer-dialog';
       dialog.className = 'commercial-offer-dialog';
-      dialog.innerHTML = `<button type="button" class="commercial-offer-close" aria-label="Close offer">×</button><span class="commercial-offer-mark">${Math.min(90, Number(discount.percent) || 10)}% OFF</span><p class="eyebrow">A PENNYBUYS OFFER</p><h2></h2><p class="commercial-offer-copy">Save ${Math.min(90, Number(discount.percent) || 10)}% on your basket. Accept this offer and it will be saved to your account for checkout.</p><p class="commercial-offer-message" role="status" aria-live="polite"></p><div class="commercial-offer-actions"><button type="button" class="commercial-offer-accept"></button><button type="button" class="commercial-offer-later">Maybe later</button></div>`;
+      dialog.innerHTML = `<div class="commercial-offer-art" aria-hidden="true"><span class="commercial-offer-orbit"></span><span class="commercial-offer-star star-one">&#10022;</span><span class="commercial-offer-star star-two">&#10023;</span><span class="commercial-offer-gift"><svg viewBox="0 0 72 72"><path d="M12 32h48v31H12zM8 22h56v13H8zM36 22v41M36 22c-2-18-23-18-21-6 1 6 11 6 21 6Zm0 0c2-18 23-18 21-6-1 6-11 6-21 6Z"/></svg></span><span class="commercial-offer-percent"></span><small>OFF YOUR BASKET</small></div><div class="commercial-offer-body"><button type="button" class="commercial-offer-close" aria-label="Close offer">&times;</button><div class="commercial-offer-brand"><span>PB</span><b>PENNYBUYS <i>PRIVATE OFFER</i></b></div><p class="commercial-offer-kicker">A LITTLE EXTRA FOR YOU</p><h2></h2><p class="commercial-offer-copy">A special saving, ready when you are. Claim it now and we&#8217;ll keep it in your account for your next basket.</p><div class="commercial-offer-perk"><span class="commercial-perk-check">&#10003;</span><span><b></b><small>Saved to your account when you accept</small></span></div><p class="commercial-offer-message" role="status" aria-live="polite"></p><div class="commercial-offer-actions"><button type="button" class="commercial-offer-accept"></button><button type="button" class="commercial-offer-later">Maybe later</button></div><small class="commercial-offer-footnote">One use per customer &middot; Applied at checkout</small></div>`;
+      const percent = Math.min(90, Number(discount.percent) || 10);
+      dialog.querySelector('.commercial-offer-percent').textContent = `${percent}%`;
+      dialog.querySelector('.commercial-offer-perk b').textContent = `Save ${percent}% on your basket`;
       dialog.querySelector('h2').textContent = discount.title || 'A little something for you';
-      dialog.querySelector('.commercial-offer-accept').textContent = customer?.email ? 'Save my offer' : 'Sign in to save offer';
+      dialog.querySelector('.commercial-offer-accept').textContent = customer?.email ? 'Claim my offer' : 'Sign in to claim offer';
       document.body.append(dialog);
       const dismiss = accepted => {
         if (!accepted) { try { localStorage.setItem(cadenceKey, String(Date.now())); } catch { /* Storage can be disabled. */ } }
