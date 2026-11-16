@@ -9,7 +9,8 @@
     CA: { name: 'Canada', currency: 'CAD', locale: 'en-CA' }
   };
   const preferenceKey = 'pennybuys-currency-settings-v1';
-  const consentKey = 'pennybuys-site-consent-v1';
+  const locationConsentKey = 'pennybuys-site-consent-v1';
+  const cookieNoticeKey = 'pennybuys-cookie-notice-v1';
   const rateKey = 'pennybuys-gbp-rates-v1';
   const whatsappNumber = '2348031421214';
   let settings = read(preferenceKey, { country: 'GB', mode: 'auto' });
@@ -49,12 +50,15 @@
   window.PennyBuysCurrency = { format, get country() { return settings.country; } };
 
   function makeSelector() {
-    const mount = document.querySelector('.header-actions') || document.querySelector('.commerce-header');
-    if (!mount || mount.querySelector('.currency-picker')) return;
+    const utilityLinks = document.querySelector('.utility-bar > div');
+    const commerceHeader = document.querySelector('.commerce-header');
+    const existing = document.querySelector('.currency-picker');
+    if (existing) return;
+    if (!utilityLinks && !commerceHeader) return;
     const label = document.createElement('label');
     label.className = 'currency-picker';
     label.innerHTML = '<span class="currency-picker-label">Ship to</span><select aria-label="Country and currency">' +
-      Object.entries(countries).map(([code, item]) => `<option value="${code}">${item.name} · ${item.currency}</option>`).join('') + '</select>';
+      Object.entries(countries).map(([code, item]) => `<option value="${code}">${item.name} · ${item.currency}</option>`).join('') + '</select><button type="button" class="location-trigger" aria-label="Detect my country" title="Detect my country"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg><span>Detect</span></button>';
     const select = label.querySelector('select');
     select.value = countries[settings.country] ? settings.country : 'GB';
     select.addEventListener('change', () => {
@@ -62,50 +66,77 @@
       write(preferenceKey, settings);
       emitChange();
     });
-    if (mount.classList.contains('commerce-header')) {
-      const bag = mount.querySelector('.commerce-bag, .checkout-bag, .commerce-header > a:last-of-type');
-      if (bag) mount.insertBefore(label, bag); else mount.append(label);
-    } else mount.prepend(label);
+    if (utilityLinks) {
+      document.querySelectorAll('.utility-bar .deliver-to').forEach(item => item.remove());
+      utilityLinks.append(label);
+    } else {
+      const toolbar = document.createElement('div');
+      toolbar.className = 'currency-toolbar';
+      toolbar.append(label);
+      commerceHeader.insertAdjacentElement('afterend', toolbar);
+    }
   }
 
-  function makeCookieDialog() {
-    if (document.querySelector('#cookie-preferences')) return;
-    const dialog = document.createElement('dialog');
-    dialog.id = 'cookie-preferences';
-    dialog.className = 'cookie-dialog';
-    dialog.setAttribute('aria-labelledby', 'cookie-title');
-    dialog.innerHTML = `<div class="cookie-dialog-mark" aria-hidden="true">✳</div>
-      <p class="eyebrow">YOUR PRIVACY, YOUR CALL</p><h2 id="cookie-title">Cookie &amp; privacy choices</h2>
-      <p class="cookie-intro">Essential browser storage keeps your basket and checkout working. We do not use advertising or analytics cookies.</p>
-      <label class="location-choice"><input type="checkbox" id="location-choice"><span><b>Suggest my country and currency</b><small>If enabled, we’ll use your approximate IP location to suggest one of the countries below. Your location is not stored as a precise address.</small></span></label>
-      <p class="cookie-location-note">You can also choose your country at any time from the page header. If location is off, prices default to UK pounds.</p>
-      <div class="cookie-actions"><button type="button" class="cookie-essential">Essential only</button><button type="button" class="cookie-save">Save choices</button></div>
-      <button type="button" class="cookie-allow">Allow location suggestion</button>
-      <button type="button" class="cookie-close" aria-label="Close privacy choices">×</button>`;
-    document.body.append(dialog);
-    const checkbox = dialog.querySelector('#location-choice');
-    function closeWith(locationEnabled) {
-      write(consentKey, { location: locationEnabled, savedAt: new Date().toISOString() });
-      dialog.close();
-      if (locationEnabled) suggestCountry();
-      else if (settings.mode !== 'manual') setCountry('GB', 'auto');
-    }
-    dialog.querySelector('.cookie-essential').addEventListener('click', () => closeWith(false));
-    dialog.querySelector('.cookie-save').addEventListener('click', () => closeWith(checkbox.checked));
-    dialog.querySelector('.cookie-allow').addEventListener('click', () => { checkbox.checked = true; closeWith(true); });
-    dialog.querySelector('.cookie-close').addEventListener('click', () => {
-      if (!read(consentKey, null)) closeWith(false); else dialog.close();
-    });
-    dialog.addEventListener('cancel', event => {
-      event.preventDefault();
-      if (!read(consentKey, null)) closeWith(false); else dialog.close();
-    });
+  function makeCookieBanner() {
+    if (document.querySelector('#cookie-notice')) return;
+    const banner = document.createElement('aside');
+    banner.id = 'cookie-notice';
+    banner.className = 'cookie-banner';
+    banner.setAttribute('role', 'dialog');
+    banner.setAttribute('aria-labelledby', 'cookie-title');
+    banner.innerHTML = `<span class="cookie-banner-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9c-4.5 0-7-2.5-7-7a2 2 0 0 0-2-2Z"/><circle cx="8" cy="10" r="1"/><circle cx="11" cy="16" r="1"/><circle cx="15" cy="11" r="1"/></svg></span><div class="cookie-banner-copy"><b id="cookie-title">A little note about cookies</b><p>We use essential browser storage to keep your basket and checkout working. We do not use advertising or analytics cookies. <a href="privacy-policy.html">Privacy policy</a></p></div><button type="button" class="cookie-banner-accept">Okay, got it</button><button type="button" class="cookie-banner-close" aria-label="Dismiss cookie notice">×</button>`;
+    document.body.append(banner);
+    const hide = () => {
+      write(cookieNoticeKey, { acknowledged: true, savedAt: new Date().toISOString() });
+      banner.classList.remove('is-visible');
+      window.setTimeout(() => { banner.hidden = true; }, 220);
+    };
+    banner.querySelector('.cookie-banner-accept').addEventListener('click', hide);
+    banner.querySelector('.cookie-banner-close').addEventListener('click', hide);
     document.querySelectorAll('[data-open-cookie-settings]').forEach(button => button.addEventListener('click', () => {
-      const saved = read(consentKey, { location: false });
-      checkbox.checked = Boolean(saved.location);
-      dialog.showModal();
+      banner.hidden = false;
+      requestAnimationFrame(() => banner.classList.add('is-visible'));
     }));
-    if (!read(consentKey, null)) dialog.showModal();
+    if (!read(cookieNoticeKey, null)) requestAnimationFrame(() => banner.classList.add('is-visible'));
+    else banner.hidden = true;
+  }
+
+  function makeLocationDialog() {
+    if (document.querySelector('#location-preferences')) return;
+    const dialog = document.createElement('dialog');
+    dialog.id = 'location-preferences';
+    dialog.className = 'location-dialog';
+    dialog.setAttribute('aria-labelledby', 'location-title');
+    dialog.innerHTML = `<button type="button" class="location-dialog-close" aria-label="Close location settings">×</button><span class="location-dialog-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg></span><p class="eyebrow">COUNTRY &amp; CURRENCY</p><h2 id="location-title">Use your approximate location?</h2><p class="location-dialog-copy">If you choose this, we’ll check your country from your IP address and suggest the matching currency. Your precise location is not saved. You can also choose a country manually from the selector.</p><p id="location-status" class="location-status"></p><div class="location-dialog-actions"><button type="button" class="location-dialog-cancel">Keep my current choice</button><button type="button" class="location-dialog-use">Use my location</button><button type="button" class="location-dialog-disable" hidden>Turn off automatic location</button></div>`;
+    document.body.append(dialog);
+    const useButton = dialog.querySelector('.location-dialog-use');
+    const disableButton = dialog.querySelector('.location-dialog-disable');
+    function openLocationDialog() {
+      const consent = read(locationConsentKey, null);
+      useButton.textContent = consent?.location ? 'Detect again' : 'Use my location';
+      disableButton.hidden = !consent?.location;
+      document.querySelector('#location-status').textContent = settings.mode === 'manual'
+        ? `Your current selection is ${countries[settings.country]?.name || 'United Kingdom'}.`
+        : consent?.location ? 'Automatic country suggestion is enabled.' : 'Location is off. Prices use UK pounds unless you choose another country above.';
+      dialog.showModal();
+    }
+    useButton.addEventListener('click', () => {
+      write(locationConsentKey, { location: true, savedAt: new Date().toISOString() });
+      settings.mode = 'auto';
+      write(preferenceKey, settings);
+      dialog.close();
+      suggestCountry();
+    });
+    disableButton.addEventListener('click', () => {
+      write(locationConsentKey, { location: false, savedAt: new Date().toISOString() });
+      dialog.close();
+      if (settings.mode !== 'manual') setCountry('GB', 'auto');
+    });
+    dialog.querySelector('.location-dialog-close').addEventListener('click', () => dialog.close());
+    dialog.querySelector('.location-dialog-cancel').addEventListener('click', () => dialog.close());
+    dialog.addEventListener('cancel', event => { event.preventDefault(); dialog.close(); });
+    document.querySelector('.location-trigger')?.addEventListener('click', openLocationDialog);
+    window.openPennyBuysLocation = openLocationDialog;
   }
 
   function setCountry(country, mode) {
@@ -180,10 +211,12 @@
   makeSelector();
   makeWhatsApp();
   makeCookieSettingsLink();
-  makeCookieDialog();
+  makeLocationDialog();
+  makeCookieBanner();
   updateCurrencyNote();
-  const consent = read(consentKey, null);
+  const consent = read(locationConsentKey, null);
   if (consent?.location && settings.mode !== 'manual') suggestCountry();
+  else if (settings.mode !== 'manual') setCountry('GB', 'auto');
   if (!countries[settings.country]) setCountry('GB', 'auto');
   emitChange();
   loadRates();
