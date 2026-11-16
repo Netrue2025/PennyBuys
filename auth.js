@@ -15,6 +15,8 @@ document.querySelectorAll('.password-toggle').forEach(button=>button.addEventLis
   const input=button.parentElement.querySelector('input');const show=input.type==='password';input.type=show?'text':'password';button.textContent=show?'Hide':'Show';button.setAttribute('aria-label',show?'Hide password':'Show password');
 }));
 
+document.querySelectorAll('[data-google-auth]').forEach(button=>button.addEventListener('click',()=>setMessage('Google sign-in is not connected yet. Connect Google OAuth to enable this option.',true)));
+
 const passwordForm=document.querySelector('#password-form');
 passwordForm?.addEventListener('submit',async event=>{
   event.preventDefault();setMessage('');
