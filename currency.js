@@ -51,6 +51,7 @@
 
   function makeSelector() {
     const utilityBar = document.querySelector('.utility-bar');
+    const utilityLinks = utilityBar?.querySelector(':scope > div');
     const commerceHeader = document.querySelector('.commerce-header');
     const existing = document.querySelector('.currency-picker');
     if (existing) return;
@@ -66,10 +67,28 @@
       write(preferenceKey, settings);
       emitChange();
     });
-    const toolbar = document.createElement('div');
-    toolbar.className = 'currency-toolbar';
-    toolbar.append(label);
-    (utilityBar || commerceHeader).insertAdjacentElement('afterend', toolbar);
+    if (utilityBar && utilityLinks) {
+      const toolbar = document.createElement('div');
+      toolbar.className = 'currency-toolbar';
+      toolbar.append(label);
+      const mobile = window.matchMedia('(max-width: 720px)');
+      const placeSelector = () => {
+        if (mobile.matches) {
+          if (label.parentElement !== toolbar) toolbar.append(label);
+          if (!toolbar.isConnected) utilityBar.insertAdjacentElement('afterend', toolbar);
+        } else {
+          if (toolbar.isConnected) toolbar.remove();
+          if (label.parentElement !== utilityLinks) utilityLinks.append(label);
+        }
+      };
+      placeSelector();
+      mobile.addEventListener?.('change', placeSelector);
+    } else if (commerceHeader) {
+      const toolbar = document.createElement('div');
+      toolbar.className = 'currency-toolbar';
+      toolbar.append(label);
+      commerceHeader.insertAdjacentElement('afterend', toolbar);
+    }
   }
 
   function makeAccountMenu(user) {

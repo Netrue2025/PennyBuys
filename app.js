@@ -65,12 +65,11 @@ document.addEventListener('click',event=>{
   if(event.target.closest('.clear-search')){query='';document.querySelector('#search-input').value='';renderProducts();return}
 });
 document.addEventListener('click',event=>{
-  const link=event.target.closest('.product-card a[href^="product.html"]');
+  const link=event.target.closest('.product-card .product-name a[href^="product.html"]');
   if(!link||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey||event.button!==0)return;
-  const card=link.closest('.product-card');
-  if(window.matchMedia('(prefers-reduced-motion: reduce)').matches||!card)return;
+  if(window.matchMedia('(prefers-reduced-motion: reduce)').matches)return;
   event.preventDefault();
-  card.classList.add('is-opening');
+  link.classList.add('is-opening');
   window.setTimeout(()=>{window.location.href=link.href},190);
 },true);
 document.querySelector('.bag-button').addEventListener('click',openBag);

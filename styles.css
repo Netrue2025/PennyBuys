@@ -164,4 +164,4 @@ body{font-family:'Market Sans',Arial,sans-serif;font-size:14px;color:#191919;bac
 }
 .quick-add.is-added{background:#267448!important;color:#fff!important;border-color:#267448!important}.quick-add.is-added::after{content:'\2713';margin-left:6px;font-weight:700}.cart-line h4 a:hover{text-decoration:underline;color:#3665f3}
 
-.product-card{transform:translateZ(0);transition:transform .18s ease,box-shadow .18s ease,opacity .18s ease}.product-card.is-opening{transform:scale(.975);opacity:.82;box-shadow:0 0 0 3px #365fe838,0 16px 30px #17263b1f}.product-detail-link{display:block;overflow:hidden}.product-detail-link img{transition:transform .24s ease}.product-detail-link:hover img{transform:scale(1.035)}@media(prefers-reduced-motion:reduce){.product-card,.product-detail-link img{transition:none}}
+.product-name a{display:inline-block;transition:color .16s ease}.product-name a:hover{color:#365fe8}.product-name a.is-opening{animation:product-name-tap .19s ease-in-out}@keyframes product-name-tap{50%{transform:scale(.95);opacity:.58}}@media(prefers-reduced-motion:reduce){.product-name a{transition:none}.product-name a.is-opening{animation:none}}
