@@ -10,7 +10,7 @@ let toastTimer;
 
 function readBag(){try{return JSON.parse(localStorage.getItem(cartKey)||'[]')}catch{return []}}
 function saveBag(){localStorage.setItem(cartKey,JSON.stringify(bag))}
-function money(value){return `£${value.toFixed(2)}`}
+function money(value){return window.PennyBuysCurrency?.format(value)||`£${value.toFixed(2)}`}
 function visibleProducts(){return products.filter(p=>{
   const matchesFilter=activeFilter==='All'||(activeFilter==='Under £20'?p.price<20:p.group===activeFilter);
   const haystack=`${p.name} ${p.category} ${p.group} ${p.badge}`.toLowerCase();
@@ -52,6 +52,7 @@ function navigateToCatalog({term='',category=''}={}){const params=new URLSearchP
 function runSearch(value){navigateToCatalog({term:value});}
 
 renderProducts();updateBag();
+window.addEventListener('pennybuys:currencychange',()=>{renderProducts();updateBag()});
 document.addEventListener('click',event=>{
   const add=event.target.closest('[data-add]');if(add){addToBag(add.dataset.add,add);return}
   const tab=event.target.closest('[data-filter]');if(tab){setFilter(tab.dataset.filter);return}

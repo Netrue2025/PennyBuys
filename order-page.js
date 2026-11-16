@@ -1,13 +1,15 @@
 const ordersKey='pennybuys-orders';
 const statusSteps=[['processing','Order is being processed'],['packed','Packed and ready for delivery'],['in_transit','On the way for delivery'],['delivered','Delivered']];
-const money=value=>`£${Number(value).toFixed(2)}`;
+const money=value=>window.PennyBuysCurrency?.format(value)||`£${Number(value).toFixed(2)}`;
 const escapeHTML=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 function readOrders(){try{return JSON.parse(localStorage.getItem(ordersKey)||'[]')}catch{return []}}
 function formatDate(value){const date=new Date(value);return Number.isNaN(date.valueOf())?'':new Intl.DateTimeFormat('en-GB',{dateStyle:'medium',timeStyle:'short'}).format(date)}
 const query=new URLSearchParams(location.search);
 const lookup=document.querySelector('#order-lookup');
+let visibleOrder=null;
 function showOrder(order){
   if(!order)return;
+  visibleOrder=order;
   const current=Math.max(0,statusSteps.findIndex(step=>step[0]===order.status));
   document.querySelector('#order-result').hidden=false;document.querySelector('#order-error').hidden=true;
   document.querySelector('#order-number').textContent=order.id;
@@ -26,3 +28,4 @@ function showOrder(order){
 lookup.addEventListener('submit',event=>{event.preventDefault();const values=new FormData(lookup);const order=readOrders().find(item=>item.id.toLowerCase()===String(values.get('orderId')).trim().toLowerCase()&&item.customer?.email.toLowerCase()===String(values.get('email')).trim().toLowerCase());if(order){showOrder(order);history.replaceState(null,'',`order.html?id=${encodeURIComponent(order.id)}`)}else{document.querySelector('#order-result').hidden=true;document.querySelector('#order-error').hidden=false}});
 const linkedOrderId=query.get('id');
 if(linkedOrderId){const order=readOrders().find(item=>item.id===linkedOrderId);if(order){lookup.hidden=true;showOrder(order);}}
+window.addEventListener('pennybuys:currencychange',()=>{if(visibleOrder)showOrder(visibleOrder)});

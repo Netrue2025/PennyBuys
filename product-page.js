@@ -2,7 +2,7 @@ const products=window.STORE_PRODUCTS||[];
 const id=new URLSearchParams(location.search).get('id');
 const product=products.find(item=>item.id===id);
 const escapeHTML=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
-const money=value=>`£${Number(value).toFixed(2)}`;
+const money=value=>window.PennyBuysCurrency?.format(value)||`£${Number(value).toFixed(2)}`;
 const bagKey='pennybuys-bag';
 const bagCount=document.querySelector('.commerce-bag-count');
 function readBag(){try{return JSON.parse(localStorage.getItem(bagKey)||'[]')}catch{return []}}
@@ -65,7 +65,9 @@ else{
   document.querySelector('#detail-highlights').innerHTML=details.points.map(point=>`<li>${point}</li>`).join('');
   document.querySelector('#detail-care').textContent=details.care;
   const related=products.filter(item=>item.id!==product.id&&(item.group===product.group||item.category===product.category)).slice(0,4);
-  document.querySelector('#related-grid').innerHTML=related.map(item=>`<a class="related-card" href="product.html?id=${encodeURIComponent(item.id)}"><img src="${item.image}" alt="${item.alt}" loading="lazy"><span>${item.category}</span><b>${item.name}</b><strong>${money(item.price)}</strong></a>`).join('');
+  const renderRelated=()=>{document.querySelector('#related-grid').innerHTML=related.map(item=>`<a class="related-card" href="product.html?id=${encodeURIComponent(item.id)}"><img src="${item.image}" alt="${item.alt}" loading="lazy"><span>${item.category}</span><b>${item.name}</b><strong>${money(item.price)}</strong></a>`).join('')};
+  renderRelated();
+  window.addEventListener('pennybuys:currencychange',()=>{document.querySelector('#detail-price').innerHTML=`${money(product.price)} ${product.oldPrice?`<del>${money(product.oldPrice)}</del>`:''}`;renderRelated()});
   const reviewList=document.querySelector('#product-reviews');
   const reviewMessage=document.querySelector('#review-message');
   const renderReviews=reviews=>{

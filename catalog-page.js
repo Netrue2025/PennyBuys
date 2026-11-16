@@ -31,7 +31,7 @@ const productKeywords={
   'mini-pouch':'pouch bag purse small gift stocking travel'
 };
 function normalized(value){return value.toLocaleLowerCase('en-GB').replace(/[’']/g,'').replace(/[^a-z0-9£\s]/g,' ').replace(/\s+/g,' ').trim()}
-function money(value){return `£${value.toFixed(2)}`}
+function money(value){return window.PennyBuysCurrency?.format(value)||`£${value.toFixed(2)}`}
 function selectedProducts(){
   const query=normalized(searchTerm);
   const hasPriceLimit=/under\s*(?:£\s*)?20|below\s*(?:£\s*)?20|less than\s*(?:£\s*)?20/.test(query);
@@ -93,3 +93,4 @@ document.querySelector('.browse-categories').addEventListener('click',()=>docume
 sortControl.value='featured';
 renderCatalog();
 updateBagCount();
+window.addEventListener('pennybuys:currencychange',renderCatalog);

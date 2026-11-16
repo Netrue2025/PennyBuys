@@ -1,6 +1,6 @@
 const products=window.STORE_PRODUCTS||[];
 const bagKey='pennybuys-bag';
-const money=value=>`\u00a3${Number(value).toFixed(2)}`;
+const money=value=>window.PennyBuysCurrency?.format(value)||`\u00a3${Number(value).toFixed(2)}`;
 const escapeHTML=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const empty=document.querySelector('#basket-empty');
 const content=document.querySelector('#basket-content');
@@ -34,4 +34,5 @@ document.querySelector('#basket-items').addEventListener('click',event=>{
   const remove=event.target.closest('[data-remove]');if(remove){bag=bag.filter(item=>item.id!==remove.dataset.remove);saveBag();renderBasket();}
 });
 window.addEventListener('storage',event=>{if(event.key===bagKey)renderBasket()});
+window.addEventListener('pennybuys:currencychange',renderBasket);
 renderBasket();

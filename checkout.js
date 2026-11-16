@@ -1,7 +1,7 @@
 const products=window.STORE_PRODUCTS||[];
 const bagKey='pennybuys-bag';
 const ordersKey='pennybuys-orders';
-const money=value=>`£${Number(value).toFixed(2)}`;
+const money=value=>window.PennyBuysCurrency?.format(value)||`£${Number(value).toFixed(2)}`;
 const escapeHTML=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 function readBag(){try{return JSON.parse(localStorage.getItem(bagKey)||'[]')}catch{return []}}
 function readOrders(){try{return JSON.parse(localStorage.getItem(ordersKey)||'[]')}catch{return []}}
@@ -14,10 +14,14 @@ const empty=document.querySelector('#checkout-empty');
 const content=document.querySelector('#checkout-content');
 if(!lines.length){empty.hidden=false;}else{
   content.hidden=false;
-  document.querySelector('#checkout-items').innerHTML=lines.map(({product,qty})=>`<div class="checkout-item"><img src="${escapeHTML(product.image)}" alt="${escapeHTML(product.alt)}"><div><b>${escapeHTML(product.name)}</b><small>Qty ${qty}</small></div><strong>${money(product.price*qty)}</strong></div>`).join('');
-  document.querySelector('#checkout-subtotal').textContent=money(subtotal);
-  document.querySelector('#checkout-delivery').textContent=delivery?money(delivery):'Free';
-  document.querySelector('#checkout-total').textContent=money(subtotal+delivery);
+  function renderCheckoutPrices(){
+    document.querySelector('#checkout-items').innerHTML=lines.map(({product,qty})=>`<div class="checkout-item"><img src="${escapeHTML(product.image)}" alt="${escapeHTML(product.alt)}"><div><b>${escapeHTML(product.name)}</b><small>Qty ${qty}</small></div><strong>${money(product.price*qty)}</strong></div>`).join('');
+    document.querySelector('#checkout-subtotal').textContent=money(subtotal);
+    document.querySelector('#checkout-delivery').textContent=delivery?money(delivery):'Free';
+    document.querySelector('#checkout-total').textContent=money(subtotal+delivery);
+  }
+  renderCheckoutPrices();
+  window.addEventListener('pennybuys:currencychange',renderCheckoutPrices);
 }
 document.querySelector('#checkout-form').addEventListener('submit',event=>{
   event.preventDefault();
