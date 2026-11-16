@@ -9,6 +9,9 @@ const productCount=document.querySelector('#product-count');
 const subscriberList=document.querySelector('#subscriber-list');
 const subscriberCount=document.querySelector('#subscriber-count');
 const subscriberMessage=document.querySelector('#subscriber-message');
+const adminReviewList=document.querySelector('#admin-review-list');
+const adminReviewCount=document.querySelector('#admin-review-count');
+const adminReviewMessage=document.querySelector('#admin-review-message');
 const productForm=document.querySelector('#product-form');
 const productMessage=document.querySelector('#product-message');
 const imageInput=productForm.elements.images;
@@ -55,6 +58,21 @@ async function loadSubscribers(){
   try{const data=await api('/api/admin/newsletter-subscriptions');const subscriptions=data.subscriptions||[];subscriberCount.textContent=subscriptions.length;document.querySelector('#nav-subscriber-count').textContent=subscriptions.length;subscriberList.innerHTML=subscriptions.length?subscriptions.map(item=>`<article class="subscriber-row"><a href="mailto:${encodeURIComponent(item.email)}">${escapeHTML(item.email)}</a><time>${item.subscribedAt?new Date(item.subscribedAt).toLocaleDateString('en-GB'):'?'}</time></article>`).join(''):'<div class="inventory-empty">No newsletter subscribers yet.</div>';subscriberMessage.textContent='';window.dispatchEvent(new CustomEvent('pennybuys:adminsubscriberschange',{detail:{count:subscriptions.length}}));}
   catch(error){subscriberList.replaceChildren();subscriberMessage.textContent=error.message;}
 }
+async function loadReviews(){
+  adminReviewMessage.textContent='Loading reviews...';
+  try{
+    const data=await api('/api/admin/reviews');
+    const reviews=data.reviews||[];
+    adminReviewCount.textContent=reviews.length;
+    document.querySelector('#nav-review-count').textContent=reviews.length;
+    document.querySelector('#overview-reviews').textContent=reviews.length;
+    adminReviewList.innerHTML=reviews.length?reviews.map(review=>{
+      const product=catalogProducts.find(item=>item.id===review.productId);
+      return `<article class="admin-review-card"><div class="admin-review-card-top"><div><span>${escapeHTML(product?.name||'Product removed')}</span><b class="review-stars" aria-label="${Number(review.rating)} out of 5 stars">${'★'.repeat(Number(review.rating))}${'☆'.repeat(5-Number(review.rating))}</b></div><time>${review.createdAt?new Date(review.createdAt).toLocaleDateString('en-GB'):'Recently'}</time></div><strong>${escapeHTML(review.name)}</strong><p>${escapeHTML(review.text)}</p><div class="admin-review-card-actions"><a href="product.html?id=${encodeURIComponent(review.productId)}#review-heading" target="_blank" rel="noopener">View on storefront <span aria-hidden="true">↗</span></a><button type="button" class="delete-button" data-admin-delete-review="${escapeHTML(review.reviewId)}">Delete review</button></div></article>`;
+    }).join(''):'<div class="inventory-empty">No customer reviews yet.</div>';
+    adminReviewMessage.textContent='';
+  }catch(error){adminReviewList.replaceChildren();adminReviewMessage.textContent=error.message;}
+}
 async function connectAdmin(candidate){
   adminToken=candidate;
   const status=await api('/api/admin/status');
@@ -66,6 +84,7 @@ async function connectAdmin(candidate){
   serviceStatus.innerHTML=`<strong>${ready?'Services ready':'Setup needed'}</strong><span>MongoDB: ${status.mongoConnected?'connected':escapeHTML(status.mongoMessage||'not connected')}</span><span>Cloudinary: ${status.cloudinaryConfigured?'configured':'not configured'}</span>${status.cloudinaryConfigured?'':'<span>Set Cloudinary credentials in your server environment before uploading.</span>'}`;
   await loadProducts();
   await loadSubscribers();
+  await loadReviews();
   window.dispatchEvent(new Event('pennybuys:adminready'));
 }
 function cancelEdit(){
@@ -122,6 +141,14 @@ document.querySelector('#admin-login-form').addEventListener('submit',async even
 });
 document.querySelector('#admin-logout').addEventListener('click',()=>{sessionStorage.removeItem(tokenKey);adminToken='';showLogin('You have signed out.')});
 document.querySelector('#refresh-subscribers').addEventListener('click',loadSubscribers);
+document.querySelector('#refresh-reviews').addEventListener('click',loadReviews);
+adminReviewList.addEventListener('click',async event=>{
+  const button=event.target.closest('[data-admin-delete-review]');
+  if(!button||!window.confirm('Remove this review from the storefront?'))return;
+  button.disabled=true;
+  try{await api(`/api/admin/reviews/${encodeURIComponent(button.dataset.adminDeleteReview)}`,{method:'DELETE'});await loadReviews();}
+  catch(error){adminReviewMessage.textContent=error.message;button.disabled=false;}
+});
 document.querySelector('#refresh-products').addEventListener('click',async event=>{
   event.currentTarget.disabled=true;
   try{await loadProducts();}catch(error){productMessage.textContent=error.message;}

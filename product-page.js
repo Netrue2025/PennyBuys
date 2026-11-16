@@ -70,26 +70,61 @@ else{
   window.addEventListener('pennybuys:currencychange',()=>{document.querySelector('#detail-price').innerHTML=`${money(product.price)} ${product.oldPrice?`<del>${money(product.oldPrice)}</del>`:''}`;renderRelated()});
   const reviewList=document.querySelector('#product-reviews');
   const reviewMessage=document.querySelector('#review-message');
-  const renderReviews=reviews=>{
-    const count=reviews.length;
-    const average=count?reviews.reduce((sum,review)=>sum+Number(review.rating),0)/count:0;
-    document.querySelector('#review-average').textContent=count?`${average.toFixed(1)} / 5`:'No ratings yet';
+  const reviewDialog=document.querySelector('#review-dialog');
+  const reviewForm=document.querySelector('#review-form');
+  const reviewSigninPrompt=document.querySelector('#review-signin-prompt');
+  const reviewSigninLink=document.querySelector('#review-signin-link');
+  let activeCustomer=null;
+  const reviewSession=()=>activeCustomer;
+  const loadCustomerSession=async()=>{try{const response=await fetch('/api/auth/session',{cache:'no-store'});const data=await response.json();activeCustomer=response.ok?data.user:null;}catch{activeCustomer=null}return activeCustomer};
+  let editingReviewId='';
+  const setReviewDialogMode=(review=null)=>{
+    const session=reviewSession();
+    editingReviewId=review?.reviewId||'';
+    document.querySelector('#review-dialog-title').textContent=review?'Edit your review':'Share a review';
+    reviewForm.querySelector('[type=submit]').textContent=review?'Save changes':'Publish review';
+    reviewForm.hidden=!session?.email;
+    reviewSigninPrompt.hidden=Boolean(session?.email);
+    reviewSigninLink.href=`signin.html?return=${encodeURIComponent(`product.html?id=${product.id}`)}`;
+    reviewMessage.textContent='';
+    reviewForm.reset();
+    if(session?.email){reviewForm.elements.name.value=review?.name||session.name||'';reviewForm.elements.name.readOnly=true;if(review){reviewForm.elements.rating.value=String(review.rating);reviewForm.elements.text.value=review.text}}
+    reviewDialog.showModal();
+  };
+  document.querySelector('#open-review-modal').addEventListener('click',async()=>{await loadCustomerSession();setReviewDialogMode()});
+  document.querySelector('.review-dialog-close').addEventListener('click',()=>reviewDialog.close());
+  document.querySelector('#review-cancel').addEventListener('click',()=>reviewDialog.close());
+  reviewDialog.addEventListener('click',event=>{if(event.target===reviewDialog)reviewDialog.close()});
+  const renderReviews=(reviews,summary=null)=>{
+    const count=Number(summary?.count??reviews.length);
+    const average=count?(summary?Number(summary.rating):reviews.reduce((sum,review)=>sum+Number(review.rating),0)/count):0;
+    const displayRating=count?average.toFixed(1):'5.0';
+    document.querySelector('#review-average').textContent=`${displayRating} / 5`;
     document.querySelector('#review-count').textContent=`${count} ${count===1?'review':'reviews'}`;
-    document.querySelector('#detail-rating').textContent=count?average.toFixed(1):'?';
+    product.rating=displayRating;product.reviews=count;
+    document.querySelector('#detail-rating').textContent=displayRating;
     document.querySelector('#detail-reviews').textContent=`(${count} ${count===1?'review':'reviews'})`;
-    reviewList.innerHTML=count?reviews.map(review=>`<article class="customer-review"><div class="customer-review-top"><strong>${escapeHTML(review.name)}</strong><span class="review-stars" aria-label="${Number(review.rating)} out of 5 stars">${'★'.repeat(Number(review.rating))}${'☆'.repeat(5-Number(review.rating))}</span></div><time>${review.createdAt?new Date(review.createdAt).toLocaleDateString('en-GB'):'Recently'}</time><p>${escapeHTML(review.text)}</p></article>`).join(''):'<p class="no-reviews">No customer reviews yet. Be the first to share your experience.</p>';
+    reviewList.innerHTML=count?reviews.map(review=>`<article class="customer-review"><div class="customer-review-top"><strong>${escapeHTML(review.name)}</strong><span class="review-stars" aria-label="${Number(review.rating)} out of 5 stars">${'★'.repeat(Number(review.rating))}${'☆'.repeat(5-Number(review.rating))}</span></div><time>${review.createdAt?new Date(review.createdAt).toLocaleDateString('en-GB'):'Recently'}${review.updatedAt?' · edited':''}</time><p>${escapeHTML(review.text)}</p>${review.canManage?`<div class="customer-review-actions"><button type="button" data-edit-review="${escapeHTML(review.reviewId)}">Edit</button><button type="button" data-delete-review="${escapeHTML(review.reviewId)}">Delete</button></div>`:''}</article>`).join(''):'<p class="no-reviews">No customer reviews yet. Be the first to share your experience.</p>';
   };
   const fetchReviews=async()=>{
-    const response=await fetch(`/api/products/${encodeURIComponent(product.id)}/reviews`);
+    const response=await fetch(`/api/products/${encodeURIComponent(product.id)}/reviews`,{cache:'no-store'});
     const data=await response.json().catch(()=>({}));
     if(!response.ok)throw new Error(data.error||'Reviews are temporarily unavailable.');
-    renderReviews(data.reviews||[]);
+    renderReviews(data.reviews||[],data.summary||null);
   };
-  fetchReviews().catch(error=>{reviewList.textContent=error.message;document.querySelector('#review-average').textContent='Reviews unavailable';document.querySelector('#review-count').textContent='';});
-  document.querySelector('#review-form').addEventListener('submit',async event=>{
-    event.preventDefault();const form=event.currentTarget;const submit=form.querySelector('button[type=submit]');submit.disabled=true;reviewMessage.textContent='Submitting your review...';
+  loadCustomerSession().then(fetchReviews).catch(error=>{reviewList.textContent=error.message;document.querySelector('#review-average').textContent=`${product.rating||'5.0'} / 5`;document.querySelector('#review-count').textContent=`${Number(product.reviews)||0} ${Number(product.reviews)===1?'review':'reviews'}`;document.querySelector('#detail-rating').textContent=product.rating||'5.0';});
+  reviewList.addEventListener('click',async event=>{
+    const editButton=event.target.closest('[data-edit-review]');
+    if(editButton){const response=await fetch(`/api/products/${encodeURIComponent(product.id)}/reviews`,{cache:'no-store'});const data=await response.json().catch(()=>({}));const review=data.reviews?.find(item=>item.reviewId===editButton.dataset.editReview&&item.canManage);if(review)setReviewDialogMode(review);return;}
+    const deleteButton=event.target.closest('[data-delete-review]');
+    if(!deleteButton||!window.confirm('Delete your review?'))return;
+    try{const response=await fetch(`/api/products/${encodeURIComponent(product.id)}/reviews/${encodeURIComponent(deleteButton.dataset.deleteReview)}`,{method:'DELETE'});const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.error||'Your review could not be deleted.');await fetchReviews();}
+    catch(error){window.alert(error.message)}
+  });
+  reviewForm.addEventListener('submit',async event=>{
+    event.preventDefault();const form=event.currentTarget;const submit=form.querySelector('button[type=submit]');const session=reviewSession();if(!session?.email){setReviewDialogMode();return;}submit.disabled=true;reviewMessage.textContent=editingReviewId?'Saving your changes...':'Publishing your review...';
     const values=Object.fromEntries(new FormData(form).entries());
-    try{const response=await fetch(`/api/products/${encodeURIComponent(product.id)}/reviews`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(values)});const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.error||'Your review could not be saved.');form.reset();await fetchReviews();reviewMessage.textContent='Thank you. Your review has been published.';}
+    try{const url=`/api/products/${encodeURIComponent(product.id)}/reviews${editingReviewId?`/${encodeURIComponent(editingReviewId)}`:''}`;const response=await fetch(url,{method:editingReviewId?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(values)});const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.error||'Your review could not be saved.');await fetchReviews();reviewDialog.close();}
     catch(error){reviewMessage.textContent=error.message;}
     finally{submit.disabled=false;}
   });

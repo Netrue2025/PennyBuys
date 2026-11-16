@@ -5,9 +5,10 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const http = require('node:http');
 const vm = require('node:vm');
+const { promisify } = require('node:util');
 const express = require('express');
 const multer = require('multer');
-const { MongoClient } = require('mongodb');
+const { MongoClient, ObjectId } = require('mongodb');
 const { v2: cloudinary } = require('cloudinary');
 
 const root = __dirname;
@@ -17,6 +18,8 @@ const configuredMongoUri = (process.env.MONGODB_URI || '').trim();
 const mongoUri = configuredMongoUri && !/cluster\.example\.mongodb\.net|username:password@/i.test(configuredMongoUri) ? configuredMongoUri : '';
 const mongoDbName = process.env.MONGODB_DB_NAME || 'pennybuys';
 const adminToken = process.env.ADMIN_TOKEN || '';
+const customerSessionSecret = process.env.CUSTOMER_SESSION_SECRET || adminToken || crypto.randomBytes(32).toString('hex');
+const scrypt = promisify(crypto.scrypt);
 const maxUploadBytes = 100 * 1024 * 1024;
 const mongoUriIsPlaceholder = /cluster\.example\.mongodb\.net|username:password@/i.test(configuredMongoUri);
 const client = mongoUri ? new MongoClient(mongoUri, { serverSelectionTimeoutMS: 7000 }) : null;
@@ -69,7 +72,21 @@ async function getStoreProducts() {
   const deletedDemoIds = await getDeletedDemoProductIds();
   const recordIds = new Set(records.map(product => product.id));
   const demoProducts = getDemoProducts().filter(product => !deletedDemoIds.has(product.id) && !recordIds.has(product.id));
-  return [...records, ...demoProducts];
+  const products = [...records, ...demoProducts];
+  const reviewCollection = client?.db(mongoDbName).collection('productReviews');
+  const summaries = reviewCollection ? await reviewCollection.aggregate([
+    { $match: { status: 'published' } },
+    { $group: { _id: '$productId', count: { $sum: 1 }, average: { $avg: '$rating' } } }
+  ]).toArray() : [];
+  const summaryByProduct = new Map(summaries.map(item => [item._id, item]));
+  return products.map(product => {
+    const summary = summaryByProduct.get(product.id);
+    return { ...product, rating: summary ? Number(summary.average).toFixed(1) : '5.0', reviews: summary?.count || 0 };
+  });
+}
+
+function withDefaultReviewStats(products) {
+  return products.map(product => ({ ...product, rating: '5.0', reviews: 0 }));
 }
 
 function safeEqual(left, right) {
@@ -142,13 +159,92 @@ async function destroyProductAssets(ids, resourceType) {
 app.disable('x-powered-by');
 app.use(express.json({ limit: '1mb' }));
 
+function readCustomer(req) {
+  const cookie = String(req.headers.cookie || '').split(';').map(part => part.trim()).find(part => part.startsWith('pennybuys_session='));
+  if (!cookie) return null;
+  let token;
+  try { token = decodeURIComponent(cookie.slice('pennybuys_session='.length)); } catch { return null; }
+  const [payload, signature] = token.split('.');
+  if (!payload || !signature) return null;
+  const expected = crypto.createHmac('sha256', customerSessionSecret).update(payload).digest('base64url');
+  if (!safeEqual(signature, expected)) return null;
+  try {
+    const session = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    if (!session.email || !session.exp || session.exp < Date.now()) return null;
+    return { email: session.email, name: session.name };
+  } catch { return null; }
+}
+
+function issueCustomerCookie(req, res, user) {
+  const payload = Buffer.from(JSON.stringify({ email: user.email, name: user.name, exp: Date.now() + 30 * 24 * 60 * 60 * 1000 })).toString('base64url');
+  const signature = crypto.createHmac('sha256', customerSessionSecret).update(payload).digest('base64url');
+  const secure = req.secure || req.get('x-forwarded-proto') === 'https';
+  res.append('Set-Cookie', `pennybuys_session=${encodeURIComponent(`${payload}.${signature}`)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${secure ? '; Secure' : ''}`);
+}
+
+async function getCustomerCollection() {
+  await getProductsCollection();
+  if (!client) return null;
+  const collection = client.db(mongoDbName).collection('customerAccounts');
+  await collection.createIndex({ email: 1 }, { unique: true });
+  return collection;
+}
+
+app.get('/api/auth/session', (req, res) => {
+  const customer = readCustomer(req);
+  res.set('Cache-Control', 'no-store').json({ user: customer });
+});
+
+app.post('/api/auth/signup', async (req, res) => {
+  const name = String(req.body?.name || '').trim();
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  const password = String(req.body?.password || '');
+  if (name.length < 2 || name.length > 100) return res.status(400).json({ error: 'Enter your name (2 to 100 characters).' });
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 160) return res.status(400).json({ error: 'Enter a valid email address.' });
+  if (password.length < 8 || password.length > 200) return res.status(400).json({ error: 'Choose a password with at least 8 characters.' });
+  try {
+    const collection = await getCustomerCollection();
+    if (!collection) return res.status(503).json({ error: 'Account creation needs a MongoDB connection.' });
+    const salt = crypto.randomBytes(16).toString('hex');
+    const passwordHash = await scrypt(password, salt, 64);
+    const user = { email, name, salt, passwordHash: passwordHash.toString('hex'), updates: req.body?.updates === true, createdAt: new Date() };
+    try { await collection.insertOne(user); }
+    catch (error) { if (error.code === 11000) return res.status(409).json({ error: 'An account with that email already exists. Please sign in.' }); throw error; }
+    issueCustomerCookie(req, res, user);
+    res.status(201).json({ user: { email, name } });
+  } catch (error) { console.error('Customer signup failed:', error.message); res.status(503).json({ error: 'We could not create your account right now. Please try again.' }); }
+});
+
+app.post('/api/auth/signin', async (req, res) => {
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  const password = String(req.body?.password || '');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !password) return res.status(400).json({ error: 'Enter your email address and password.' });
+  try {
+    const collection = await getCustomerCollection();
+    if (!collection) return res.status(503).json({ error: 'Sign-in needs a MongoDB connection.' });
+    const user = await collection.findOne({ email });
+    if (!user) return res.status(401).json({ error: 'We could not find an account with that email.' });
+    const passwordHash = await scrypt(password, user.salt, 64);
+    if (!safeEqual(passwordHash.toString('hex'), user.passwordHash)) return res.status(401).json({ error: 'That password does not match this account.' });
+    issueCustomerCookie(req, res, user);
+    res.json({ user: { email: user.email, name: user.name } });
+  } catch (error) { console.error('Customer sign-in failed:', error.message); res.status(503).json({ error: 'Sign-in is unavailable right now. Please try again.' }); }
+});
+
+app.post('/api/auth/signout', (req, res) => {
+  const secure = req.secure || req.get('x-forwarded-proto') === 'https';
+  res.append('Set-Cookie', `pennybuys_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure ? '; Secure' : ''}`);
+  res.json({ ok: true });
+});
+app.use((req, _res, next) => { req.customer = readCustomer(req); next(); });
+
 app.get('/products-data.js', async (_req, res) => {
   try {
     const products = await getStoreProducts();
     res.type('js').set('Cache-Control', 'no-store').send(`window.STORE_PRODUCTS = ${JSON.stringify(products)};`);
   } catch (error) {
     console.warn('MongoDB unavailable; serving demo catalog:', error.message);
-    res.type('js').set('Cache-Control', 'no-store').send(`window.STORE_PRODUCTS = ${JSON.stringify(getDemoProducts())};`);
+    res.type('js').set('Cache-Control', 'no-store').send(`window.STORE_PRODUCTS = ${JSON.stringify(withDefaultReviewStats(getDemoProducts()))};`);
   }
 });
 
@@ -156,7 +252,7 @@ app.get('/api/products', async (_req, res) => {
   try { res.json(await getStoreProducts()); }
   catch (error) {
     console.warn('MongoDB unavailable; serving demo catalog:', error.message);
-    res.set('X-Catalog-Source', 'demo').json(getDemoProducts());
+    res.set('X-Catalog-Source', 'demo').json(withDefaultReviewStats(getDemoProducts()));
   }
 });
 
@@ -213,15 +309,23 @@ app.get('/api/products/:id/reviews', async (req, res) => {
     if (!products.some(product => product.id === req.params.id)) return res.status(404).json({ error: 'Product not found.' });
     const collection = client?.db(mongoDbName).collection('productReviews');
     if (!collection) return res.status(503).json({ error: 'Product reviews are temporarily unavailable.' });
-    const reviews = await collection.find({ productId: req.params.id, status: 'published' }, { projection: { _id: 0, name: 1, rating: 1, text: 1, createdAt: 1 } }).sort({ createdAt: -1 }).limit(100).toArray();
-    res.set('Cache-Control', 'no-store').json({ reviews });
+    const viewerEmail = req.customer?.email || '';
+    const reviews = await collection.find({ productId: req.params.id, status: 'published' }, { projection: { _id: 1, reviewId: 1, ownerEmail: 1, name: 1, rating: 1, text: 1, createdAt: 1, updatedAt: 1 } }).sort({ createdAt: -1 }).limit(100).toArray();
+    const publicReviews = reviews.map(({ _id, ownerEmail, ...review }) => ({ ...review, reviewId: review.reviewId || String(_id), canManage: Boolean(viewerEmail && ownerEmail === viewerEmail) }));
+    const [summary] = await collection.aggregate([
+      { $match: { productId: req.params.id, status: 'published' } },
+      { $group: { _id: '$productId', count: { $sum: 1 }, average: { $avg: '$rating' } } }
+    ]).toArray();
+    res.set('Cache-Control', 'no-store').json({ reviews: publicReviews, summary: { count: summary?.count || 0, rating: summary ? Number(summary.average).toFixed(1) : '5.0' } });
   } catch (error) { console.error('Product reviews could not be loaded:', error.message); res.status(503).json({ error: 'Product reviews are temporarily unavailable.' }); }
 });
 
 app.post('/api/products/:id/reviews', async (req, res) => {
-  const name = String(req.body?.name || '').trim();
+  const ownerEmail = req.customer?.email || '';
+  const name = String(req.customer?.name || req.body?.name || '').trim();
   const text = String(req.body?.text || '').trim();
   const rating = Number(req.body?.rating);
+  if (!req.customer) return res.status(401).json({ error: 'Sign in to your PennyBuys account before leaving a review.' });
   if (name.length < 2) return res.status(400).json({ error: 'Enter a name with at least two characters.' });
   if (name.length > 80) return res.status(400).json({ error: 'Keep your display name under 80 characters.' });
   if (!Number.isInteger(rating) || rating < 1 || rating > 5) return res.status(400).json({ error: 'Choose a rating from 1 to 5 stars.' });
@@ -233,10 +337,62 @@ app.post('/api/products/:id/reviews', async (req, res) => {
     if (!product) return res.status(404).json({ error: 'Product not found.' });
     const collection = client?.db(mongoDbName).collection('productReviews');
     if (!collection) return res.status(503).json({ error: 'Reviews are temporarily unavailable. Please try again later.' });
-    const review = { productId: product.id, name, rating, text, status: 'published', createdAt: new Date() };
+    const review = { reviewId: crypto.randomUUID(), productId: product.id, ownerEmail, name, rating, text, status: 'published', createdAt: new Date(), updatedAt: null };
     await collection.insertOne(review);
-    res.status(201).json({ review: { name, rating, text, createdAt: review.createdAt.toISOString() } });
+    res.status(201).json({ review: { reviewId: review.reviewId, name, rating, text, createdAt: review.createdAt.toISOString(), canManage: true } });
   } catch (error) { console.error('Product review could not be saved:', error.message); res.status(503).json({ error: 'Your review could not be saved right now. Please try again later.' }); }
+});
+
+app.put('/api/products/:id/reviews/:reviewId', async (req, res) => {
+  const ownerEmail = req.customer?.email || '';
+  const name = String(req.customer?.name || req.body?.name || '').trim();
+  const text = String(req.body?.text || '').trim();
+  const rating = Number(req.body?.rating);
+  if (!req.customer) return res.status(401).json({ error: 'Sign in to edit your review.' });
+  if (name.length < 2 || name.length > 80) return res.status(400).json({ error: 'Enter a display name between 2 and 80 characters.' });
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) return res.status(400).json({ error: 'Choose a rating from 1 to 5 stars.' });
+  if (text.length < 10 || text.length > 2000) return res.status(400).json({ error: 'Reviews must be between 10 and 2,000 characters.' });
+  try {
+    const collection = client?.db(mongoDbName).collection('productReviews');
+    if (!collection) return res.status(503).json({ error: 'Reviews are temporarily unavailable. Please try again later.' });
+    const result = await collection.updateOne({ productId: req.params.id, reviewId: req.params.reviewId, ownerEmail, status: 'published' }, { $set: { name, rating, text, updatedAt: new Date() } });
+    if (!result.matchedCount) return res.status(404).json({ error: 'Review not found, or it does not belong to this account.' });
+    res.json({ ok: true });
+  } catch (error) { console.error('Product review could not be updated:', error.message); res.status(503).json({ error: 'Your review could not be updated right now.' }); }
+});
+
+app.delete('/api/products/:id/reviews/:reviewId', async (req, res) => {
+  const ownerEmail = req.customer?.email || '';
+  if (!req.customer) return res.status(401).json({ error: 'Sign in to delete your review.' });
+  try {
+    const collection = client?.db(mongoDbName).collection('productReviews');
+    if (!collection) return res.status(503).json({ error: 'Reviews are temporarily unavailable. Please try again later.' });
+    const result = await collection.deleteOne({ productId: req.params.id, reviewId: req.params.reviewId, ownerEmail, status: 'published' });
+    if (!result.deletedCount) return res.status(404).json({ error: 'Review not found, or it does not belong to this account.' });
+    res.json({ ok: true });
+  } catch (error) { console.error('Product review could not be deleted:', error.message); res.status(503).json({ error: 'Your review could not be deleted right now.' }); }
+});
+
+app.get('/api/admin/reviews', requireAdmin, async (_req, res) => {
+  try {
+    await getProductsCollection();
+    if (!client) return res.status(503).json({ error: 'MongoDB is not configured.' });
+    const reviews = await client.db(mongoDbName).collection('productReviews').find({ status: 'published' }, { projection: { _id: 1, reviewId: 1, productId: 1, name: 1, rating: 1, text: 1, createdAt: 1, updatedAt: 1 } }).sort({ createdAt: -1 }).limit(500).toArray();
+    const normalizedReviews = reviews.map(({ _id, ...review }) => ({ ...review, reviewId: review.reviewId || String(_id) }));
+    res.set('Cache-Control', 'no-store').json({ reviews: normalizedReviews });
+  } catch (error) { console.error('Admin reviews could not be loaded:', error.message); res.status(503).json({ error: 'Reviews could not be loaded. Check the MongoDB connection.' }); }
+});
+
+app.delete('/api/admin/reviews/:reviewId', requireAdmin, async (req, res) => {
+  try {
+    await getProductsCollection();
+    if (!client) return res.status(503).json({ error: 'MongoDB is not configured.' });
+    const id = req.params.reviewId;
+    const selector = ObjectId.isValid(id) ? { $or: [{ reviewId: id }, { _id: new ObjectId(id) }] } : { reviewId: id };
+    const result = await client.db(mongoDbName).collection('productReviews').deleteOne(selector);
+    if (!result.deletedCount) return res.status(404).json({ error: 'Review not found.' });
+    res.json({ ok: true });
+  } catch (error) { console.error('Admin review deletion failed:', error.message); res.status(503).json({ error: 'The review could not be deleted right now.' }); }
 });
 
 app.post('/api/products', requireAdmin, upload.fields([{ name: 'images', maxCount: 5 }, { name: 'video', maxCount: 1 }]), async (req, res) => {

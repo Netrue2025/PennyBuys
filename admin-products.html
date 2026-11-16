@@ -26,6 +26,7 @@
             <a href="#overview-section" aria-current="location"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13h6V4H4zM14 20h6v-9h-6zM14 4h6v3h-6zM4 17h6v3H4z"/></svg><span>Overview</span></a>
             <a href="#inventory-section"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v13H4zM3 4h18v3H3zM9 11h6"/></svg><span>Products</span><b id="nav-product-count">0</b></a>
             <a href="#order-section"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM4 8h16M8 3v4M16 3v4M8 12h3M8 16h7"/></svg><span>Orders</span><b id="nav-order-count">0</b></a>
+            <a href="#review-section"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H8l-4 2v-5.5A7.5 7.5 0 1 1 20 11.5Z"/><path d="m8 12 2.5 2.5L16 9"/></svg><span>Reviews</span><b id="nav-review-count">0</b></a>
             <a href="#product-editor"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Add product</span></a>
             <a href="#newsletter-subscribers"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v12H4zM5 7l7 6 7-6"/></svg><span>Subscribers</span><b id="nav-subscriber-count">0</b></a>
           </nav>
@@ -33,7 +34,7 @@
         </aside>
         <div class="admin-content">
           <nav class="admin-mobile-nav" aria-label="Admin sections">
-            <a href="#overview-section" aria-current="location">Overview</a><a href="#inventory-section">Products</a><a href="#order-section">Orders</a><a href="#newsletter-subscribers">Subscribers</a>
+            <a href="#overview-section" aria-current="location">Overview</a><a href="#inventory-section">Products</a><a href="#order-section">Orders</a><a href="#review-section">Reviews</a><a href="#newsletter-subscribers">Subscribers</a>
           </nav>
           <section id="service-status" class="service-status" aria-live="polite"></section>
           <section id="overview-section" class="dashboard-section overview-section">
@@ -43,6 +44,7 @@
               <a class="overview-stat stat-amber" href="#inventory-section"><span class="stat-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v13H4zM3 4h18v3H3zM8 11v3M12 11v5M16 11v2"/></svg></span><span class="stat-label">Units in stock</span><b id="overview-stock">--</b><small>Across all products <span aria-hidden="true">&#8594;</span></small></a>
               <a class="overview-stat stat-coral" href="#order-section"><span class="stat-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM4 8h16M8 3v4M16 3v4M8 12h3M8 16h7"/></svg></span><span class="stat-label">Open orders</span><b id="overview-orders">--</b><small>See order updates <span aria-hidden="true">&#8594;</span></small></a>
               <a class="overview-stat stat-green" href="#newsletter-subscribers"><span class="stat-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v12H4zM5 7l7 6 7-6"/></svg></span><span class="stat-label">Subscribers</span><b id="overview-subscribers">--</b><small>View subscriber list <span aria-hidden="true">&#8594;</span></small></a>
+              <a class="overview-stat stat-blue" href="#review-section"><span class="stat-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H8l-4 2v-5.5A7.5 7.5 0 1 1 20 11.5Z"/><path d="m8 12 2.5 2.5L16 9"/></svg></span><span class="stat-label">Customer reviews</span><b id="overview-reviews">--</b><small>Manage feedback <span aria-hidden="true">&#8594;</span></small></a>
             </div>
             <div class="overview-panels">
               <article class="overview-panel category-panel"><div class="panel-title-row"><div><p class="eyebrow">CATALOG MIX</p><h3>Products by category</h3></div><a href="#inventory-section">Manage products <span aria-hidden="true">&#8594;</span></a></div><div id="category-chart" class="category-chart" aria-label="Products by category"></div></article>
@@ -59,6 +61,7 @@
             <div class="inventory-heading"><div><p class="eyebrow">FULFILMENT DESK</p><h2>Orders <span id="order-count">0</span></h2></div><button id="refresh-orders" class="quiet-button icon-text-button" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14-5L4 8M4 4v4h4M4 13a8 8 0 0 0 14 5l2-2M20 20v-4h-4"/></svg><span>Refresh</span></button></div>
             <div id="admin-demo-note" class="demo-notice">Demo order data is stored in this browser and shared with the customer status page on this device.</div><div id="admin-orders-list" class="admin-orders-list"></div><div id="admin-no-orders" class="commerce-empty" hidden><h3>No orders to show yet</h3><p>New checkout orders will appear here for delivery updates.</p><a class="primary-button" href="catalog.html">Browse storefront</a></div>
           </section>
+          <section id="review-section" class="dashboard-section admin-panel admin-reviews-section"><div class="inventory-heading"><div><p class="eyebrow">CUSTOMER FEEDBACK</p><h2>Product reviews <span id="admin-review-count">0</span></h2><p class="admin-reviews-intro">Review the latest feedback and remove anything that should not appear in your shop.</p></div><button id="refresh-reviews" class="quiet-button icon-text-button" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14-5L4 8M4 4v4h4M4 13a8 8 0 0 0 14 5l2-2M20 20v-4h-4"/></svg><span>Refresh</span></button></div><p id="admin-review-message" class="form-message" role="status" aria-live="polite"></p><div id="admin-review-list" class="admin-review-list"></div></section>
           <section id="product-editor" class="dashboard-section admin-panel upload-panel"><div class="panel-heading"><div><p class="eyebrow">PRODUCT LISTING</p><h2 id="form-title">Add a product</h2><p>Add product details, media and stock, one step at a time.</p></div></div>
             <div class="form-progress" aria-label="Product form progress"><div class="form-progress-track"><span id="form-progress-fill"></span></div><button type="button" data-step-go="0" aria-current="step"><i>1</i><span>Basics</span></button><button type="button" data-step-go="1"><i>2</i><span>Description</span></button><button type="button" data-step-go="2"><i>3</i><span>Media & review</span></button></div>
             <form id="product-form" class="product-form" enctype="multipart/form-data" novalidate>
