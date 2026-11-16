@@ -238,6 +238,85 @@ app.post('/api/auth/signout', (req, res) => {
 });
 app.use((req, _res, next) => { req.customer = readCustomer(req); next(); });
 
+async function getCommercialsCollection() {
+  await getProductsCollection();
+  if (!client) return null;
+  return client.db(mongoDbName).collection('storeCommercials');
+}
+
+app.get('/api/commercials/active', async (_req, res) => {
+  try {
+    const collection = await getCommercialsCollection();
+    const config = collection ? await collection.findOne({ key: 'active' }, { projection: { _id: 0, key: 0 } }) : null;
+    res.set('Cache-Control', 'no-store').json(config || { discount: { enabled: false }, freeDelivery: { enabled: false, itemCount: 3 } });
+  } catch (error) { console.warn('Commercials could not be loaded:', error.message); res.json({ discount: { enabled: false }, freeDelivery: { enabled: false, itemCount: 3 } }); }
+});
+
+app.get('/api/account/offers', async (req, res) => {
+  if (!req.customer) return res.status(401).json({ error: 'Sign in to view your saved offers.' });
+  try {
+    const collection = await getCommercialsCollection();
+    const offers = collection ? await collection.find({ type: 'customer-offer', email: req.customer.email, status: 'accepted' }, { projection: { _id: 0 } }).sort({ acceptedAt: -1 }).toArray() : [];
+    res.set('Cache-Control', 'no-store').json({ offers });
+  } catch (error) { console.error('Customer offers could not be loaded:', error.message); res.status(503).json({ error: 'Saved offers are temporarily unavailable.' }); }
+});
+
+app.post('/api/account/offers/accept', async (req, res) => {
+  if (!req.customer) return res.status(401).json({ error: 'Sign in to save this offer to your account.' });
+  const offerId = String(req.body?.offerId || '').slice(0, 120);
+  try {
+    const collection = await getCommercialsCollection();
+    if (!collection) return res.status(503).json({ error: 'Offers need a MongoDB connection.' });
+    const config = await collection.findOne({ key: 'active' }, { projection: { _id: 0 } });
+    const discount = config?.discount;
+    if (!discount?.enabled || discount.offerId !== offerId) return res.status(409).json({ error: 'This offer is no longer available.' });
+    const existing = await collection.findOne({ type: 'customer-offer', email: req.customer.email, offerId, status: 'accepted' }, { projection: { _id: 0 } });
+    if (existing) return res.json({ ok: true, offer: existing, alreadySaved: true });
+    const offer = { type: 'customer-offer', email: req.customer.email, offerId, title: String(discount.title || 'PennyBuys offer').slice(0, 100), percent: Math.min(90, Math.max(1, Number(discount.percent) || 1)), status: 'accepted', acceptedAt: new Date(), redeemedAt: null };
+    await collection.insertOne(offer);
+    const { _id, ...saved } = offer;
+    res.status(201).json({ ok: true, offer: saved });
+  } catch (error) { console.error('Offer could not be saved:', error.message); res.status(503).json({ error: 'We could not save your offer right now.' }); }
+});
+
+app.post('/api/account/offers/redeem', async (req, res) => {
+  if (!req.customer) return res.status(401).json({ error: 'Sign in to apply your saved offer.' });
+  const offerId = String(req.body?.offerId || '').slice(0, 120);
+  if (!offerId) return res.status(400).json({ error: 'Select a saved offer first.' });
+  try {
+    const collection = await getCommercialsCollection();
+    if (!collection) return res.status(503).json({ error: 'Offers need a MongoDB connection.' });
+    const result = await collection.updateOne({ type: 'customer-offer', email: req.customer.email, offerId, status: 'accepted' }, { $set: { status: 'redeemed', redeemedAt: new Date() } });
+    if (!result.modifiedCount) return res.status(409).json({ error: 'This saved offer has already been used.' });
+    res.json({ ok: true });
+  } catch (error) { console.error('Offer could not be redeemed:', error.message); res.status(503).json({ error: 'We could not apply your offer right now.' }); }
+});
+
+app.get('/api/admin/commercials', requireAdmin, async (_req, res) => {
+  try {
+    const collection = await getCommercialsCollection();
+    if (!collection) return res.status(503).json({ error: 'MongoDB is not configured.' });
+    const config = await collection.findOne({ key: 'active' }, { projection: { _id: 0, key: 0 } });
+    res.json(config || { discount: { enabled: false, offerId: crypto.randomUUID(), title: '', percent: 10, intervalHours: 24 }, freeDelivery: { enabled: false, itemCount: 3, title: '' } });
+  } catch (error) { res.status(503).json({ error: 'Commercial settings could not be loaded.' }); }
+});
+
+app.put('/api/admin/commercials', requireAdmin, async (req, res) => {
+  const discountIn = req.body?.discount || {};
+  const deliveryIn = req.body?.freeDelivery || {};
+  const config = {
+    key: 'active', updatedAt: new Date(),
+    discount: { enabled: discountIn.enabled === true, offerId: crypto.randomUUID(), title: String(discountIn.title || 'A little something for you').trim().slice(0, 100), percent: Math.min(90, Math.max(1, Number(discountIn.percent) || 10)), intervalHours: Math.min(720, Math.max(1, Number(discountIn.intervalHours) || 24)) },
+    freeDelivery: { enabled: deliveryIn.enabled === true, itemCount: Math.min(50, Math.max(1, Math.floor(Number(deliveryIn.itemCount) || 3))), title: String(deliveryIn.title || '').trim().slice(0, 100) }
+  };
+  try {
+    const collection = await getCommercialsCollection();
+    if (!collection) return res.status(503).json({ error: 'MongoDB is not configured.' });
+    await collection.replaceOne({ key: 'active' }, config, { upsert: true });
+    res.json({ ok: true, config });
+  } catch (error) { console.error('Commercial settings could not be saved:', error.message); res.status(503).json({ error: 'Commercial settings could not be saved.' }); }
+});
+
 app.get('/products-data.js', async (_req, res) => {
   try {
     const products = await getStoreProducts();

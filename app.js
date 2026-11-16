@@ -64,6 +64,15 @@ document.addEventListener('click',event=>{
   const suggestion=event.target.closest('[data-search]');if(suggestion){runSearch(suggestion.dataset.search);return}
   if(event.target.closest('.clear-search')){query='';document.querySelector('#search-input').value='';renderProducts();return}
 });
+document.addEventListener('click',event=>{
+  const link=event.target.closest('.product-card a[href^="product.html"]');
+  if(!link||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey||event.button!==0)return;
+  const card=link.closest('.product-card');
+  if(window.matchMedia('(prefers-reduced-motion: reduce)').matches||!card)return;
+  event.preventDefault();
+  card.classList.add('is-opening');
+  window.setTimeout(()=>{window.location.href=link.href},190);
+},true);
 document.querySelector('.bag-button').addEventListener('click',openBag);
 document.querySelector('.drawer-close').addEventListener('click',closeBag);
 document.querySelector('.overlay').addEventListener('click',closeBag);

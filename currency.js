@@ -50,11 +50,11 @@
   window.PennyBuysCurrency = { format, get country() { return settings.country; } };
 
   function makeSelector() {
-    const utilityLinks = document.querySelector('.utility-bar > div');
+    const utilityBar = document.querySelector('.utility-bar');
     const commerceHeader = document.querySelector('.commerce-header');
     const existing = document.querySelector('.currency-picker');
     if (existing) return;
-    if (!utilityLinks && !commerceHeader) return;
+    if (!utilityBar && !commerceHeader) return;
     const label = document.createElement('label');
     label.className = 'currency-picker';
     label.innerHTML = '<span class="currency-picker-label">Ship to</span><select aria-label="Country and currency">' +
@@ -66,15 +66,10 @@
       write(preferenceKey, settings);
       emitChange();
     });
-    if (utilityLinks) {
-      document.querySelectorAll('.utility-bar .deliver-to').forEach(item => item.remove());
-      utilityLinks.append(label);
-    } else {
-      const toolbar = document.createElement('div');
-      toolbar.className = 'currency-toolbar';
-      toolbar.append(label);
-      commerceHeader.insertAdjacentElement('afterend', toolbar);
-    }
+    const toolbar = document.createElement('div');
+    toolbar.className = 'currency-toolbar';
+    toolbar.append(label);
+    (utilityBar || commerceHeader).insertAdjacentElement('afterend', toolbar);
   }
 
   function makeAccountMenu(user) {
@@ -135,6 +130,72 @@
       const data = await response.json();
       if (data.user?.email) makeAccountMenu(data.user);
     } catch { /* Visitors can still browse if the account service is unavailable. */ }
+  }
+
+  async function showCommercials() {
+    try {
+      const response = await fetch('/api/commercials/active', { cache: 'no-store' });
+      if (!response.ok) return;
+      const config = await response.json();
+      const promotion = config.freeDelivery;
+      if (promotion?.enabled && (location.pathname.endsWith('index.html') || location.pathname === '/' || location.pathname.endsWith('catalog.html'))) {
+        const anchor = document.querySelector('.hero, .catalog-intro, .catalog-main');
+        if (anchor && !document.querySelector('.commercial-promo-strip')) {
+          const strip = document.createElement('aside');
+          strip.className = 'commercial-promo-strip';
+          strip.setAttribute('role', 'note');
+          strip.innerHTML = `<span class="commercial-promo-mark" aria-hidden="true">&#8599;</span><span><b></b><small>Free delivery when your basket has ${Math.max(1, Number(promotion.itemCount) || 3)} items.</small></span>`;
+          strip.querySelector('b').textContent = promotion.title || `Pick ${Math.max(1, Number(promotion.itemCount) || 3)} items for free delivery`;
+          anchor.insertAdjacentElement('beforebegin', strip);
+        }
+      }
+      const discount = config.discount;
+      if (!discount?.enabled || !discount.offerId) return;
+      if (!['/', '/index.html', '/catalog.html'].includes(location.pathname) && !location.pathname.endsWith('/product.html')) return;
+      let customer = null;
+      try { const session = await fetch('/api/auth/session', { cache: 'no-store' }); customer = (await session.json()).user; } catch { return; }
+      if (customer?.email) {
+        try {
+          const savedResponse = await fetch('/api/account/offers', { cache: 'no-store' });
+          const saved = savedResponse.ok ? await savedResponse.json() : {};
+          if ((saved.offers || []).some(offer => offer.offerId === discount.offerId)) return;
+        } catch { return; }
+      }
+      const cadenceKey = `pennybuys-commercial-popup:${discount.offerId}:${customer?.email || 'guest'}`;
+      try { if (Date.now() - Number(localStorage.getItem(cadenceKey) || 0) < Math.max(1, Number(discount.intervalHours) || 24) * 3600000) return; } catch { /* continue without persisted cadence */ }
+      if (document.querySelector('#commercial-offer-dialog')) return;
+      const dialog = document.createElement('dialog');
+      dialog.id = 'commercial-offer-dialog';
+      dialog.className = 'commercial-offer-dialog';
+      dialog.innerHTML = `<button type="button" class="commercial-offer-close" aria-label="Close offer">×</button><span class="commercial-offer-mark">${Math.min(90, Number(discount.percent) || 10)}% OFF</span><p class="eyebrow">A PENNYBUYS OFFER</p><h2></h2><p class="commercial-offer-copy">Save ${Math.min(90, Number(discount.percent) || 10)}% on your basket. Accept this offer and it will be saved to your account for checkout.</p><p class="commercial-offer-message" role="status" aria-live="polite"></p><div class="commercial-offer-actions"><button type="button" class="commercial-offer-accept"></button><button type="button" class="commercial-offer-later">Maybe later</button></div>`;
+      dialog.querySelector('h2').textContent = discount.title || 'A little something for you';
+      dialog.querySelector('.commercial-offer-accept').textContent = customer?.email ? 'Save my offer' : 'Sign in to save offer';
+      document.body.append(dialog);
+      const dismiss = accepted => {
+        if (!accepted) { try { localStorage.setItem(cadenceKey, String(Date.now())); } catch { /* Storage can be disabled. */ } }
+        dialog.close(); dialog.remove();
+      };
+      dialog.querySelector('.commercial-offer-close').addEventListener('click', () => dismiss(false));
+      dialog.querySelector('.commercial-offer-later').addEventListener('click', () => dismiss(false));
+      dialog.addEventListener('click', event => { if (event.target === dialog) dismiss(false); });
+      dialog.addEventListener('cancel', event => { event.preventDefault(); dismiss(false); });
+      dialog.querySelector('.commercial-offer-accept').addEventListener('click', async event => {
+        if (!customer?.email) { location.href = `signin.html?return=${encodeURIComponent(location.pathname + location.search)}`; return; }
+        const button = event.currentTarget;
+        const message = dialog.querySelector('.commercial-offer-message');
+        button.disabled = true; message.textContent = 'Saving your offer...';
+        try {
+          const accepted = await fetch('/api/account/offers/accept', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ offerId: discount.offerId }) });
+          const result = await accepted.json().catch(() => ({}));
+          if (!accepted.ok) throw new Error(result.error || 'This offer could not be saved.');
+          try { localStorage.setItem(cadenceKey, String(Date.now())); } catch { /* Storage can be disabled. */ }
+          message.textContent = 'Offer saved. It will be applied in your basket.';
+          window.dispatchEvent(new Event('pennybuys:offerschange'));
+          window.setTimeout(() => dismiss(true), 900);
+        } catch (error) { message.textContent = error.message; button.disabled = false; }
+      });
+      window.setTimeout(() => { if (dialog.isConnected && !document.querySelector('dialog[open]')) dialog.showModal(); }, 900);
+    } catch { /* Storefront remains usable if campaign settings are unavailable. */ }
   }
 
   function makeCookieBanner() {
@@ -270,6 +331,7 @@
 
   makeSelector();
   loadCustomerAccount();
+  showCommercials();
   makeWhatsApp();
   makeCookieSettingsLink();
   makeLocationDialog();

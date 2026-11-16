@@ -86,7 +86,7 @@ document.querySelector('#catalog-search-form').addEventListener('submit',event=>
   window.location.href=`catalog.html${next.size?`?${next.toString()}`:''}`;
 });
 sortControl.addEventListener('change',renderCatalog);
-resultGrid.addEventListener('click',event=>{const button=event.target.closest('[data-catalog-add]');if(button)addToBag(button.dataset.catalogAdd,button)});
+resultGrid.addEventListener('click',event=>{const button=event.target.closest('[data-catalog-add]');if(button){addToBag(button.dataset.catalogAdd,button);return}const link=event.target.closest('.product-card a[href^="product.html"]');if(!link||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey||event.button!==0||window.matchMedia('(prefers-reduced-motion: reduce)').matches)return;const card=link.closest('.product-card');if(!card)return;event.preventDefault();card.classList.add('is-opening');window.setTimeout(()=>{window.location.href=link.href},190)});
 document.querySelectorAll('[data-category-link]').forEach(link=>link.addEventListener('click',event=>{event.preventDefault();const chosen=event.currentTarget.dataset.categoryLink;window.location.href=chosen?`catalog.html?category=${encodeURIComponent(chosen)}`:'catalog.html'}));
 document.querySelector('.menu-toggle').addEventListener('click',event=>{const menu=document.querySelector('.mobile-menu');const open=!menu.classList.contains('open');menu.classList.toggle('open',open);menu.setAttribute('aria-hidden',String(!open));event.currentTarget.setAttribute('aria-expanded',String(open))});
 document.querySelector('.browse-categories').addEventListener('click',()=>document.querySelector('.catalog-chips').scrollIntoView({behavior:'smooth',block:'center'}));

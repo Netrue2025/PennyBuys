@@ -163,3 +163,5 @@ body{font-family:'Market Sans',Arial,sans-serif;font-size:14px;color:#191919;bac
   .hero-slide.is-active .hero-image-grid { position: absolute !important; left: 0 !important; top: 0 !important; right: 0 !important; bottom: 0 !important; width: 100% !important; height: 100% !important; }
 }
 .quick-add.is-added{background:#267448!important;color:#fff!important;border-color:#267448!important}.quick-add.is-added::after{content:'\2713';margin-left:6px;font-weight:700}.cart-line h4 a:hover{text-decoration:underline;color:#3665f3}
+
+.product-card{transform:translateZ(0);transition:transform .18s ease,box-shadow .18s ease,opacity .18s ease}.product-card.is-opening{transform:scale(.975);opacity:.82;box-shadow:0 0 0 3px #365fe838,0 16px 30px #17263b1f}.product-detail-link{display:block;overflow:hidden}.product-detail-link img{transition:transform .24s ease}.product-detail-link:hover img{transform:scale(1.035)}@media(prefers-reduced-motion:reduce){.product-card,.product-detail-link img{transition:none}}

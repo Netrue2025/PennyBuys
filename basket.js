@@ -5,6 +5,8 @@ const escapeHTML=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;'
 const empty=document.querySelector('#basket-empty');
 const content=document.querySelector('#basket-content');
 let bag=[];
+let activeOffer=null;
+let freeDeliveryCount=0;
 function readBag(){try{const stored=JSON.parse(localStorage.getItem(bagKey)||'[]');return Array.isArray(stored)?stored.filter(line=>products.some(product=>product.id===line.id)&&Number.isFinite(Number(line.qty))&&Number(line.qty)>0).map(line=>({id:line.id,qty:Math.min(99,Math.floor(Number(line.qty)))})):[]}catch{return []}}
 function saveBag(){localStorage.setItem(bagKey,JSON.stringify(bag))}
 function renderBasket(){
@@ -22,10 +24,17 @@ function renderBasket(){
     <div class="basket-item-end"><strong>${money(product.price*line.qty)}</strong><button type="button" class="basket-remove" data-remove="${escapeHTML(product.id)}">Remove</button></div>
   </article>`).join('');
   const subtotal=lines.reduce((sum,item)=>sum+item.product.price*item.line.qty,0);
-  const delivery=subtotal>=35?0:3.95;
+  const itemCount=lines.reduce((sum,item)=>sum+item.line.qty,0);
+  const delivery=subtotal>=35||(freeDeliveryCount>0&&itemCount>=freeDeliveryCount)?0:3.95;
+  const discount=activeOffer?Math.round(subtotal*Math.min(90,Number(activeOffer.percent)||0))/100:0;
+  const total=Math.max(0,subtotal-discount)+delivery;
   document.querySelector('#basket-subtotal').textContent=money(subtotal);
+  document.querySelector('#basket-discount-row').hidden=!discount;
+  document.querySelector('#basket-discount-label').textContent=activeOffer?`${activeOffer.title} · You save`:'Saved offer';
+  document.querySelector('#basket-discount').textContent=discount?`−${money(discount)}`:'';
   document.querySelector('#basket-delivery').textContent=delivery?money(delivery):'Free';
-  document.querySelector('#basket-total').textContent=money(subtotal+delivery);
+  document.querySelector('#basket-total').textContent=money(total);
+  document.querySelector('#basket-summary-note').textContent=freeDeliveryCount?`Free delivery on orders over £35 or when you pick ${freeDeliveryCount} items.`:'Free UK delivery on orders over £35.';
   saveBag();
 }
 document.querySelector('#basket-items').addEventListener('click',event=>{
@@ -35,4 +44,16 @@ document.querySelector('#basket-items').addEventListener('click',event=>{
 });
 window.addEventListener('storage',event=>{if(event.key===bagKey)renderBasket()});
 window.addEventListener('pennybuys:currencychange',renderBasket);
+async function loadBasketPromotions(){
+  try{
+    const [campaignResponse,offerResponse]=await Promise.all([fetch('/api/commercials/active',{cache:'no-store'}),fetch('/api/account/offers',{cache:'no-store'})]);
+    const campaign=campaignResponse.ok?await campaignResponse.json():{};
+    const saved=offerResponse.ok?await offerResponse.json():{};
+    freeDeliveryCount=campaign.freeDelivery?.enabled?Math.max(1,Number(campaign.freeDelivery.itemCount)||3):0;
+    activeOffer=(saved.offers||[]).find(offer=>offer.status==='accepted')||null;
+    renderBasket();
+  }catch{renderBasket();}
+}
+window.addEventListener('pennybuys:offerschange',loadBasketPromotions);
 renderBasket();
+loadBasketPromotions();

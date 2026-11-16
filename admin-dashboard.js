@@ -137,26 +137,6 @@
   });
   backdrop.addEventListener('click', closeSidebar);
   document.addEventListener('keydown', event => { if (event.key === 'Escape') closeSidebar(); });
-  document.querySelectorAll('.admin-workflow a,.admin-mobile-nav a').forEach(link => link.addEventListener('click', () => {
-    document.querySelectorAll('.admin-workflow a,.admin-mobile-nav a').forEach(item => item.removeAttribute('aria-current'));
-    document.querySelectorAll(`a[href="${link.getAttribute('href')}"]`).forEach(item => item.setAttribute('aria-current', 'location'));
-    closeSidebar();
-    if (link.getAttribute('href') === '#product-editor') window.dispatchEvent(new Event('pennybuys:startnewproduct'));
-  }));
-  if ('IntersectionObserver' in window) {
-    const observer = new IntersectionObserver(entries => entries.forEach(entry => {
-      if (!entry.isIntersecting) return;
-      const href = `#${entry.target.id}`;
-      document.querySelectorAll('.admin-workflow a,.admin-mobile-nav a').forEach(link => {
-        if (link.getAttribute('href') === href) link.setAttribute('aria-current', 'location'); else link.removeAttribute('aria-current');
-      });
-    }), { rootMargin: '-15% 0px -72% 0px' });
-    document.querySelectorAll('.dashboard-section').forEach(section => observer.observe(section));
-  }
-  window.addEventListener('hashchange', () => {
-    const target = location.hash;
-    document.querySelectorAll('.admin-workflow a,.admin-mobile-nav a').forEach(link => link.toggleAttribute('aria-current', link.getAttribute('href') === target));
-    if (target === '#product-editor') window.dispatchEvent(new Event('pennybuys:startnewproduct'));
-  });
+  document.querySelectorAll('.admin-workflow a,.admin-mobile-nav a').forEach(link => link.addEventListener('click', closeSidebar));
   renderOverview();
 })();

@@ -73,6 +73,22 @@ async function loadReviews(){
     adminReviewMessage.textContent='';
   }catch(error){adminReviewList.replaceChildren();adminReviewMessage.textContent=error.message;}
 }
+async function loadCommercials(){
+  const form=document.querySelector('#commercials-form');
+  if(!form)return;
+  const message=document.querySelector('#commercials-message');
+  try{
+    const config=await api('/api/admin/commercials');
+    form.elements.discountEnabled.checked=config.discount?.enabled===true;
+    form.elements.discountTitle.value=config.discount?.title||'';
+    form.elements.discountPercent.value=config.discount?.percent||10;
+    form.elements.intervalHours.value=config.discount?.intervalHours||24;
+    form.elements.deliveryEnabled.checked=config.freeDelivery?.enabled===true;
+    form.elements.deliveryTitle.value=config.freeDelivery?.title||'';
+    form.elements.itemCount.value=config.freeDelivery?.itemCount||3;
+    message.textContent='';
+  }catch(error){message.textContent=error.message;}
+}
 async function connectAdmin(candidate){
   adminToken=candidate;
   const status=await api('/api/admin/status');
@@ -85,6 +101,7 @@ async function connectAdmin(candidate){
   await loadProducts();
   await loadSubscribers();
   await loadReviews();
+  await loadCommercials();
   window.dispatchEvent(new Event('pennybuys:adminready'));
 }
 function cancelEdit(){
@@ -140,6 +157,17 @@ document.querySelector('#admin-login-form').addEventListener('submit',async even
   catch(error){showLogin(error.message);adminToken='';sessionStorage.removeItem(tokenKey);}
 });
 document.querySelector('#admin-logout').addEventListener('click',()=>{sessionStorage.removeItem(tokenKey);adminToken='';showLogin('You have signed out.')});
+document.querySelector('#commercials-form').addEventListener('submit',async event=>{
+  event.preventDefault();
+  const form=event.currentTarget;
+  const message=document.querySelector('#commercials-message');
+  const submit=form.querySelector('[type="submit"]');
+  submit.disabled=true;message.textContent='Saving commercial settings...';message.classList.remove('success');
+  const body={discount:{enabled:form.elements.discountEnabled.checked,title:form.elements.discountTitle.value.trim(),percent:Number(form.elements.discountPercent.value),intervalHours:Number(form.elements.intervalHours.value)},freeDelivery:{enabled:form.elements.deliveryEnabled.checked,title:form.elements.deliveryTitle.value.trim(),itemCount:Number(form.elements.itemCount.value)}};
+  try{await api('/api/admin/commercials',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});message.textContent='Commercial settings saved.';message.classList.add('success');window.dispatchEvent(new Event('pennybuys:commercialschanged'));}
+  catch(error){message.textContent=error.message;}
+  finally{submit.disabled=false;}
+});
 document.querySelector('#refresh-subscribers').addEventListener('click',loadSubscribers);
 document.querySelector('#refresh-reviews').addEventListener('click',loadReviews);
 adminReviewList.addEventListener('click',async event=>{
