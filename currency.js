@@ -77,6 +77,66 @@
     }
   }
 
+  function makeAccountMenu(user) {
+    const utilityGreeting = document.querySelector('.utility-bar > span');
+    const commerceHeader = document.querySelector('.commerce-header');
+    if (!user || (!utilityGreeting && !commerceHeader)) return;
+
+    let profileDialog = document.querySelector('#account-profile-dialog');
+    if (!profileDialog) {
+      profileDialog = document.createElement('dialog');
+      profileDialog.id = 'account-profile-dialog';
+      profileDialog.className = 'account-profile-dialog';
+      profileDialog.setAttribute('aria-labelledby', 'account-profile-title');
+      profileDialog.innerHTML = '<button type="button" class="account-profile-close" aria-label="Close profile">&times;</button><span class="account-profile-avatar" aria-hidden="true"></span><p class="eyebrow">YOUR PENNYBUYS ACCOUNT</p><h2 id="account-profile-title">Your profile</h2><dl><div><dt>Name</dt><dd data-profile-name></dd></div><div><dt>Email</dt><dd data-profile-email></dd></div></dl><div class="account-profile-actions"><button type="button" class="account-signout">Sign out</button><button type="button" class="account-profile-done">Done</button></div>';
+      document.body.append(profileDialog);
+      profileDialog.querySelector('.account-profile-close').addEventListener('click', () => profileDialog.close());
+      profileDialog.querySelector('.account-profile-done').addEventListener('click', () => profileDialog.close());
+      profileDialog.addEventListener('click', event => { if (event.target === profileDialog) profileDialog.close(); });
+    }
+    profileDialog.querySelector('.account-profile-avatar').textContent = String(user.name || user.email).trim().charAt(0).toUpperCase();
+    profileDialog.querySelector('[data-profile-name]').textContent = user.name || 'PennyBuys customer';
+    profileDialog.querySelector('[data-profile-email]').textContent = user.email;
+
+    const control = document.createElement('div');
+    control.className = utilityGreeting ? 'account-control utility-account-control' : 'account-control commerce-account-control';
+    control.innerHTML = '<button class="account-control-trigger" type="button" aria-haspopup="menu" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg><span class="account-control-name"></span><svg class="account-caret" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></button><div class="account-menu" role="menu" hidden><div class="account-menu-heading"><small>Signed in as</small><b class="account-menu-email"></b></div><button type="button" role="menuitem" data-account-profile>My profile</button><button type="button" role="menuitem" class="account-signout">Sign out</button></div>';
+    const trigger = control.querySelector('.account-control-trigger');
+    control.querySelector('.account-control-name').textContent = user.name || 'My account';
+    control.querySelector('.account-menu-email').textContent = user.email;
+    const menu = control.querySelector('.account-menu');
+    const closeMenu = () => { menu.hidden = true; trigger.setAttribute('aria-expanded', 'false'); };
+    trigger.addEventListener('click', () => { const open = menu.hidden; menu.hidden = !open; trigger.setAttribute('aria-expanded', String(open)); });
+    control.querySelector('[data-account-profile]').addEventListener('click', () => { closeMenu(); profileDialog.showModal(); });
+    [...control.querySelectorAll('.account-signout'), profileDialog.querySelector('.account-signout')].forEach(button => button.addEventListener('click', async () => {
+      button.disabled = true;
+      try {
+        const response = await fetch('/api/auth/signout', { method: 'POST', credentials: 'same-origin' });
+        if (!response.ok) throw new Error('Sign out request failed');
+        try { localStorage.removeItem('pennybuys-demo-session'); } catch { /* Storage can be disabled by the browser. */ }
+        window.location.reload();
+      } catch {
+        button.disabled = false;
+        window.alert('We could not sign you out just now. Please check your connection and try again.');
+      }
+    }));
+    document.addEventListener('click', event => { if (!control.contains(event.target)) closeMenu(); });
+    if (utilityGreeting) utilityGreeting.replaceChildren(control);
+    else {
+      const bag = commerceHeader.querySelector('.commerce-bag, .checkout-secure');
+      commerceHeader.insertBefore(control, bag || null);
+    }
+  }
+
+  async function loadCustomerAccount() {
+    try {
+      const response = await fetch('/api/auth/session', { credentials: 'same-origin', cache: 'no-store' });
+      if (!response.ok) return;
+      const data = await response.json();
+      if (data.user?.email) makeAccountMenu(data.user);
+    } catch { /* Visitors can still browse if the account service is unavailable. */ }
+  }
+
   function makeCookieBanner() {
     if (document.querySelector('#cookie-notice')) return;
     const banner = document.createElement('aside');
@@ -209,6 +269,7 @@
   }
 
   makeSelector();
+  loadCustomerAccount();
   makeWhatsApp();
   makeCookieSettingsLink();
   makeLocationDialog();
