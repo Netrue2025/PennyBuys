@@ -77,8 +77,8 @@ function updateBagCount(){
   try{const bag=JSON.parse(localStorage.getItem('pennybuys-bag')||'[]');document.querySelector('.catalog-basket .bag-count').textContent=bag.reduce((sum,line)=>sum+line.qty,0)}catch{document.querySelector('.catalog-basket .bag-count').textContent='0'}
 }
 let toastTimer;
-function addToBag(id){
-  try{const bag=JSON.parse(localStorage.getItem('pennybuys-bag')||'[]');const line=bag.find(item=>item.id===id);if(line)line.qty++;else bag.push({id,qty:1});localStorage.setItem('pennybuys-bag',JSON.stringify(bag));updateBagCount();const message=document.querySelector('.catalog-toast');message.textContent=`${catalogProducts.find(item=>item.id===id).name} added to your bag`;message.classList.add('is-visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>message.classList.remove('is-visible'),2200)}catch{window.alert('Your browser could not save the shopping bag. Please try again.')}
+function addToBag(id,button){
+  try{const bag=JSON.parse(localStorage.getItem('pennybuys-bag')||'[]');const line=bag.find(item=>item.id===id);if(line)line.qty++;else bag.push({id,qty:1});localStorage.setItem('pennybuys-bag',JSON.stringify(bag));updateBagCount();const product=catalogProducts.find(item=>item.id===id);const message=document.querySelector('.catalog-toast');message.textContent=`${product.name} added to your basket`;message.classList.add('is-visible');if(button){const label=button.dataset.defaultLabel||button.textContent;button.dataset.defaultLabel=label;button.classList.add('is-added');button.textContent='Added';window.setTimeout(()=>{button.classList.remove('is-added');button.textContent=label},1300)}clearTimeout(toastTimer);toastTimer=setTimeout(()=>message.classList.remove('is-visible'),2200)}catch{window.alert('Your browser could not save the shopping basket. Please try again.')}
 }
 document.querySelector('#catalog-search-form').addEventListener('submit',event=>{
   event.preventDefault();const chosen=document.querySelector('#catalog-search-category').value;
@@ -86,7 +86,7 @@ document.querySelector('#catalog-search-form').addEventListener('submit',event=>
   window.location.href=`catalog.html${next.size?`?${next.toString()}`:''}`;
 });
 sortControl.addEventListener('change',renderCatalog);
-resultGrid.addEventListener('click',event=>{const button=event.target.closest('[data-catalog-add]');if(button)addToBag(button.dataset.catalogAdd)});
+resultGrid.addEventListener('click',event=>{const button=event.target.closest('[data-catalog-add]');if(button)addToBag(button.dataset.catalogAdd,button)});
 document.querySelectorAll('[data-category-link]').forEach(link=>link.addEventListener('click',event=>{event.preventDefault();const chosen=event.currentTarget.dataset.categoryLink;window.location.href=chosen?`catalog.html?category=${encodeURIComponent(chosen)}`:'catalog.html'}));
 document.querySelector('.menu-toggle').addEventListener('click',event=>{const menu=document.querySelector('.mobile-menu');const open=!menu.classList.contains('open');menu.classList.toggle('open',open);menu.setAttribute('aria-hidden',String(!open));event.currentTarget.setAttribute('aria-expanded',String(open))});
 document.querySelector('.browse-categories').addEventListener('click',()=>document.querySelector('.catalog-chips').scrollIntoView({behavior:'smooth',block:'center'}));

@@ -66,6 +66,6 @@ else{
   document.querySelector('#related-grid').innerHTML=related.map(item=>`<a class="related-card" href="product.html?id=${encodeURIComponent(item.id)}"><img src="${item.image}" alt="${item.alt}" loading="lazy"><span>${item.category}</span><b>${item.name}</b><strong>${money(item.price)}</strong></a>`).join('');
   let qty=1;
   document.querySelectorAll('[data-qty-step]').forEach(button=>button.addEventListener('click',()=>{qty=Math.max(1,Math.min(20,qty+Number(button.dataset.qtyStep)));document.querySelector('#detail-qty').value=qty;document.querySelector('#detail-qty').textContent=qty}));
-  document.querySelector('#detail-add').addEventListener('click',()=>{addProduct(product.id,qty);const message=document.querySelector('#detail-added');message.textContent=`${qty} × ${product.name} added to your bag.`;document.querySelector('#detail-add').textContent='Added to bag ✓';setTimeout(()=>document.querySelector('#detail-add').textContent='Add to bag',1400)});
+  document.querySelector('#detail-add').addEventListener('click',()=>{addProduct(product.id,qty);const message=document.querySelector('#detail-added');message.textContent=`${qty} \u00d7 ${product.name} added to your basket.`;document.querySelector('#detail-add').textContent='Added to basket';setTimeout(()=>document.querySelector('#detail-add').textContent='Add to bag',1400)});
   document.querySelector('#detail-buy').addEventListener('click',()=>{addProduct(product.id,qty);location.href='checkout.html'});
 }

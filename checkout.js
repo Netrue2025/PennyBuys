@@ -6,6 +6,7 @@ const escapeHTML=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;'
 function readBag(){try{return JSON.parse(localStorage.getItem(bagKey)||'[]')}catch{return []}}
 function readOrders(){try{return JSON.parse(localStorage.getItem(ordersKey)||'[]')}catch{return []}}
 const bag=readBag().filter(line=>products.some(product=>product.id===line.id)&&Number(line.qty)>0);
+const basketCount=document.querySelector('[data-basket-count]');if(basketCount)basketCount.textContent=bag.reduce((sum,line)=>sum+Number(line.qty),0);
 const lines=bag.map(line=>({product:products.find(product=>product.id===line.id),qty:Number(line.qty)}));
 const subtotal=lines.reduce((sum,line)=>sum+line.product.price*line.qty,0);
 const delivery=subtotal>=35?0:3.95;

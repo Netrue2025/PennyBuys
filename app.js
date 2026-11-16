@@ -35,7 +35,7 @@ function updateBag(){
   document.querySelector('.bag-count').textContent=count;
   document.querySelector('.drawer-count').textContent=`(${count})`;
   const items=document.querySelector('.cart-items');
-  items.innerHTML=bag.map(line=>{const p=products.find(item=>item.id===line.id);if(!p)return '';return `<div class="cart-line"><img src="${p.image}" alt="${p.alt}"><div><h4>${p.name}</h4><small>${p.category}</small><div class="quantity"><button data-qty="${p.id}" data-change="-1" aria-label="Remove one ${p.name}">−</button><span>${line.qty}</span><button data-qty="${p.id}" data-change="1" aria-label="Add one ${p.name}">+</button></div></div><div><div class="line-price">${money(p.price*line.qty)}</div><button class="remove-line" data-remove="${p.id}">Remove</button></div></div>`}).join('');
+  items.innerHTML=bag.map(line=>{const p=products.find(item=>item.id===line.id);if(!p)return '';return `<div class="cart-line"><a class="cart-line-preview" href="product.html?id=${encodeURIComponent(p.id)}" aria-label="View ${p.name}"><img src="${p.image}" alt="${p.alt}"></a><div><h4><a href="product.html?id=${encodeURIComponent(p.id)}">${p.name}</a></h4><small>${p.category}</small><div class="quantity"><button data-qty="${p.id}" data-change="-1" aria-label="Remove one ${p.name}">−</button><span>${line.qty}</span><button data-qty="${p.id}" data-change="1" aria-label="Add one ${p.name}">+</button></div></div><div><div class="line-price">${money(p.price*line.qty)}</div><button class="remove-line" data-remove="${p.id}">Remove</button></div></div>`}).join('');
   const total=bag.reduce((sum,line)=>sum+(products.find(p=>p.id===line.id)?.price||0)*line.qty,0);
   const remaining=Math.max(35-total,0);
   document.querySelector('.cart-subtotal').textContent=money(total);
@@ -47,13 +47,13 @@ function updateBag(){
 }
 function openBag(){document.querySelector('.cart-drawer').classList.add('open');document.querySelector('.overlay').classList.add('open');document.body.classList.add('drawer-open');document.querySelector('.cart-drawer').setAttribute('aria-hidden','false')}
 function closeBag(){document.querySelector('.cart-drawer').classList.remove('open');document.querySelector('.overlay').classList.remove('open');document.body.classList.remove('drawer-open');document.querySelector('.cart-drawer').setAttribute('aria-hidden','true')}
-function addToBag(id){const line=bag.find(item=>item.id===id);if(line)line.qty++;else bag.push({id,qty:1});updateBag();const p=products.find(item=>item.id===id);toast(`${p.name} added to your bag`)}
+function addToBag(id,button){const line=bag.find(item=>item.id===id);if(line)line.qty++;else bag.push({id,qty:1});updateBag();const p=products.find(item=>item.id===id);toast(`${p.name} added to your basket`);if(button){const label=button.dataset.defaultLabel||button.textContent;button.dataset.defaultLabel=label;button.classList.add('is-added');button.textContent='Added';window.setTimeout(()=>{button.classList.remove('is-added');button.textContent=label},1300)}}
 function navigateToCatalog({term='',category=''}={}){const params=new URLSearchParams();if(term.trim())params.set('q',term.trim());if(category)params.set('category',category);window.location.href=`catalog.html${params.size?`?${params.toString()}`:''}`}
 function runSearch(value){navigateToCatalog({term:value});}
 
 renderProducts();updateBag();
 document.addEventListener('click',event=>{
-  const add=event.target.closest('[data-add]');if(add){addToBag(add.dataset.add);return}
+  const add=event.target.closest('[data-add]');if(add){addToBag(add.dataset.add,add);return}
   const tab=event.target.closest('[data-filter]');if(tab){setFilter(tab.dataset.filter);return}
   const category=event.target.closest('[data-category]');if(category){event.preventDefault();navigateToCatalog({category:category.dataset.category});return}
   const nav=event.target.closest('[data-nav-filter]');if(nav){event.preventDefault();navigateToCatalog({category:nav.dataset.navFilter});document.querySelector('.mobile-menu').classList.remove('open');return}
