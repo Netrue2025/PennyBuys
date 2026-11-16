@@ -21,6 +21,7 @@
           <label>Price (£)<input name="price" type="number" min="0.01" max="100000" step="0.01" required placeholder="0.00"></label>
           <label>Stock quantity<input name="inventory" type="number" min="0" max="1000000" step="1" required value="0"></label>
           <label class="field-wide">Product description<textarea name="description" rows="4" maxlength="3000" required placeholder="Describe the product and its useful details"></textarea></label>
+          <label class="field-wide">Delivery & returns<textarea name="deliveryReturns" rows="3" maxlength="2000" placeholder="Product delivery timing, charges, and return information"></textarea><small>Shown on this product page. Leave blank to use the store default.</small></label>
           <label class="file-field"><span>Product images <small>JPG, PNG, WebP, AVIF or GIF · up to 5 · max 100 MB each</small></span><input name="images" type="file" accept="image/jpeg,image/png,image/webp,image/avif,image/gif" multiple></label>
           <label class="file-field"><span>Product video <small>Optional · MP4, WebM or MOV · max 100 MB</small></span><input name="video" type="file" accept="video/mp4,video/webm,video/quicktime"><span id="remove-video-wrap" class="remove-video-wrap" hidden><input name="removeVideo" type="checkbox" value="true"> Remove current video</span></label>
           <section id="existing-media" class="existing-media field-wide" hidden aria-label="Product media"><strong class="existing-media-title">Product media</strong><p class="existing-media-help">The first image is the storefront preview. Reorder, remove, or add images below.</p><div id="existing-image-list" class="existing-image-list"></div><div id="existing-video-preview" class="existing-video-preview"></div></section>
@@ -29,6 +30,7 @@
         </form>
         <p id="product-message" class="form-message" role="status" aria-live="polite"></p>
       </section>
+      <section class="admin-panel subscriber-panel"><div class="inventory-heading"><div><p class="eyebrow">CUSTOMER UPDATES</p><h2>Newsletter subscribers <span id="subscriber-count">0</span></h2></div><button id="refresh-subscribers" class="quiet-button" type="button">Refresh</button></div><p id="subscriber-message" class="form-message" role="status" aria-live="polite"></p><div id="subscriber-list" class="subscriber-list"></div></section>
       <section class="inventory-section"><div class="inventory-heading"><div><p class="eyebrow">STOREFRONT CATALOG</p><h2>Products <span id="product-count">0</span></h2></div><button id="refresh-products" class="quiet-button" type="button">Refresh</button></div><div id="product-list" class="product-list"></div></section>
     </div>
   </main>

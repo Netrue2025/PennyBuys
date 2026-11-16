@@ -169,11 +169,71 @@ app.get('/api/admin/status', requireAdmin, async (_req, res) => {
   res.json({ mongoConnected, mongoUriConfigured: Boolean(mongoUri), mongoMessage, cloudinaryConfigured });
 });
 
+app.post('/api/newsletter/subscribe', async (req, res) => {
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  const consent = req.body?.consent === true;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) return res.status(400).json({ error: 'Enter a valid email address.' });
+  if (!consent) return res.status(400).json({ error: 'Please confirm you want to receive PennyBuys email updates.' });
+  let collection;
+  try { await getProductsCollection(); collection = client?.db(mongoDbName).collection('newsletterSubscriptions'); }
+  catch (error) { console.error('MongoDB newsletter connection failed:', error.message); return res.status(503).json({ error: 'Newsletter sign-up is temporarily unavailable. Please try again later.' }); }
+  if (!collection) return res.status(503).json({ error: 'Newsletter sign-up is temporarily unavailable. Please try again later.' });
+  try {
+    const existing = await collection.findOne({ email });
+    if (existing?.status === 'subscribed') return res.json({ ok: true, alreadySubscribed: true });
+    const now = new Date();
+    await collection.updateOne({ email }, { $set: { email, status: 'subscribed', consent: true, consentVersion: '2026-11-16', subscribedAt: now, updatedAt: now } }, { upsert: true });
+    res.status(201).json({ ok: true, alreadySubscribed: false });
+  } catch (error) { console.error('Newsletter subscription save failed:', error.message); res.status(503).json({ error: 'Newsletter sign-up is temporarily unavailable. Please try again later.' }); }
+});
+
+app.get('/api/admin/newsletter-subscriptions', requireAdmin, async (_req, res) => {
+  try {
+    await getProductsCollection();
+    if (!client) return res.status(503).json({ error: 'MongoDB is not configured.' });
+    const subscriptions = await client.db(mongoDbName).collection('newsletterSubscriptions').find({ status: 'subscribed' }, { projection: { _id: 0, email: 1, subscribedAt: 1 } }).sort({ subscribedAt: -1 }).toArray();
+    res.json({ subscriptions });
+  } catch (error) { console.error('Newsletter subscriptions could not be loaded:', error.message); res.status(503).json({ error: 'Newsletter subscriptions could not be loaded. Check the MongoDB connection.' }); }
+});
+
+app.get('/api/products/:id/reviews', async (req, res) => {
+  try {
+    const products = await getStoreProducts();
+    if (!products.some(product => product.id === req.params.id)) return res.status(404).json({ error: 'Product not found.' });
+    const collection = client?.db(mongoDbName).collection('productReviews');
+    if (!collection) return res.status(503).json({ error: 'Product reviews are temporarily unavailable.' });
+    const reviews = await collection.find({ productId: req.params.id, status: 'published' }, { projection: { _id: 0, name: 1, rating: 1, text: 1, createdAt: 1 } }).sort({ createdAt: -1 }).limit(100).toArray();
+    res.set('Cache-Control', 'no-store').json({ reviews });
+  } catch (error) { console.error('Product reviews could not be loaded:', error.message); res.status(503).json({ error: 'Product reviews are temporarily unavailable.' }); }
+});
+
+app.post('/api/products/:id/reviews', async (req, res) => {
+  const name = String(req.body?.name || '').trim();
+  const text = String(req.body?.text || '').trim();
+  const rating = Number(req.body?.rating);
+  if (name.length < 2) return res.status(400).json({ error: 'Enter a name with at least two characters.' });
+  if (name.length > 80) return res.status(400).json({ error: 'Keep your display name under 80 characters.' });
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) return res.status(400).json({ error: 'Choose a rating from 1 to 5 stars.' });
+  if (text.length < 10) return res.status(400).json({ error: 'Write at least 10 characters in your review.' });
+  if (text.length > 2000) return res.status(400).json({ error: 'Keep your review under 2,000 characters.' });
+  try {
+    const products = await getStoreProducts();
+    const product = products.find(item => item.id === req.params.id);
+    if (!product) return res.status(404).json({ error: 'Product not found.' });
+    const collection = client?.db(mongoDbName).collection('productReviews');
+    if (!collection) return res.status(503).json({ error: 'Reviews are temporarily unavailable. Please try again later.' });
+    const review = { productId: product.id, name, rating, text, status: 'published', createdAt: new Date() };
+    await collection.insertOne(review);
+    res.status(201).json({ review: { name, rating, text, createdAt: review.createdAt.toISOString() } });
+  } catch (error) { console.error('Product review could not be saved:', error.message); res.status(503).json({ error: 'Your review could not be saved right now. Please try again later.' }); }
+});
+
 app.post('/api/products', requireAdmin, upload.fields([{ name: 'images', maxCount: 5 }, { name: 'video', maxCount: 1 }]), async (req, res) => {
   const name = String(req.body.name || '').trim();
   const category = String(req.body.category || '').trim();
   const group = String(req.body.group || '').trim();
   const description = String(req.body.description || '').trim();
+  const deliveryReturns = String(req.body.deliveryReturns || '').trim();
   const price = Number(req.body.price);
   const inventory = Number(req.body.inventory);
   const images = req.files?.images || [];
@@ -184,6 +244,7 @@ app.post('/api/products', requireAdmin, upload.fields([{ name: 'images', maxCoun
   if (!Number.isFinite(price) || price <= 0 || price > 100000) return res.status(400).json({ error: 'Enter a valid product price.' });
   if (!Number.isInteger(inventory) || inventory < 0 || inventory > 1000000) return res.status(400).json({ error: 'Enter stock as a whole number from 0 to 1,000,000.' });
   if (!description || description.length > 3000) return res.status(400).json({ error: 'Add a product description under 3,000 characters.' });
+  if (deliveryReturns.length > 2000) return res.status(400).json({ error: 'Keep delivery and returns information under 2,000 characters.' });
   if (!images.length) return res.status(400).json({ error: 'Choose at least one product image.' });
   if (!process.env.CLOUDINARY_URL && !(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET)) {
     return res.status(503).json({ error: 'Configure Cloudinary credentials on the server before uploading media.' });
@@ -213,7 +274,7 @@ app.post('/api/products', requireAdmin, upload.fields([{ name: 'images', maxCoun
       cloudinaryImageIds: imageAssets.map(asset => asset.public_id),
       video: videoAsset?.secure_url || '',
       cloudinaryVideoId: videoAsset?.public_id || '',
-      inventory, description,
+      inventory, description, deliveryReturns,
       alt: name,
       createdAt: now,
       updatedAt: now
@@ -231,6 +292,7 @@ app.put('/api/products/:id', requireAdmin, upload.fields([{ name: 'images', maxC
   const category = String(req.body.category || '').trim();
   const group = String(req.body.group || '').trim();
   const description = String(req.body.description || '').trim();
+  const deliveryReturns = String(req.body.deliveryReturns || '').trim();
   const price = Number(req.body.price);
   const inventory = Number(req.body.inventory);
   const images = req.files?.images || [];
@@ -240,6 +302,7 @@ app.put('/api/products/:id', requireAdmin, upload.fields([{ name: 'images', maxC
   if (!Number.isFinite(price) || price <= 0 || price > 100000) return res.status(400).json({ error: 'Enter a valid product price.' });
   if (!Number.isInteger(inventory) || inventory < 0 || inventory > 1000000) return res.status(400).json({ error: 'Enter stock as a whole number from 0 to 1,000,000.' });
   if (!description || description.length > 3000) return res.status(400).json({ error: 'Add a product description under 3,000 characters.' });
+  if (deliveryReturns.length > 2000) return res.status(400).json({ error: 'Keep delivery and returns information under 2,000 characters.' });
   if ((images.length || video) && !process.env.CLOUDINARY_URL && !(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET)) {
     return res.status(503).json({ error: 'Configure Cloudinary credentials on the server before changing product media.' });
   }
@@ -256,7 +319,7 @@ app.put('/api/products/:id', requireAdmin, upload.fields([{ name: 'images', maxC
     const previous = existingRecord || getDemoProducts().find(product => product.id === req.params.id);
     if (!previous) return res.status(404).json({ error: 'Product not found.' });
     const now = new Date();
-    const changes = { name, category, group, description, price, inventory, alt: name, updatedAt: now };
+    const changes = { name, category, group, description, deliveryReturns, price, inventory, alt: name, updatedAt: now };
     let oldImageIds = [];
     let oldVideoIds = [];
     let imagePlan;

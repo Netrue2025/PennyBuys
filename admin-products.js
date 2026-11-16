@@ -6,6 +6,9 @@ const loginMessage=document.querySelector('#login-message');
 const serviceStatus=document.querySelector('#service-status');
 const productList=document.querySelector('#product-list');
 const productCount=document.querySelector('#product-count');
+const subscriberList=document.querySelector('#subscriber-list');
+const subscriberCount=document.querySelector('#subscriber-count');
+const subscriberMessage=document.querySelector('#subscriber-message');
 const productForm=document.querySelector('#product-form');
 const productMessage=document.querySelector('#product-message');
 const imageInput=productForm.elements.images;
@@ -41,6 +44,11 @@ function renderProducts(products){
   productList.innerHTML=products.length?products.map(product=>`<article class="inventory-card"><img src="${escapeHTML(product.image)}" alt="" loading="lazy"><div><h3>${escapeHTML(product.name)}</h3><p>${escapeHTML(product.category)}${product.video?' | video':''}</p><small>Stock: ${Number(product.inventory??0)} | ${Number(product.gallery?.length||0)+1} image${product.gallery?.length?'s':''}</small></div><strong>GBP ${Number(product.price).toFixed(2)}</strong><div class="inventory-actions"><button class="quiet-button" type="button" data-edit-id="${escapeHTML(product.id)}">Edit</button><button class="delete-button" type="button" data-delete-id="${escapeHTML(product.id)}">Delete</button></div></article>`).join(''):'<div class="inventory-empty">No products are available yet.</div>';
 }
 async function loadProducts(){renderProducts(await api('/api/products'));}
+async function loadSubscribers(){
+  subscriberMessage.textContent='Loading subscribers...';
+  try{const data=await api('/api/admin/newsletter-subscriptions');const subscriptions=data.subscriptions||[];subscriberCount.textContent=subscriptions.length;subscriberList.innerHTML=subscriptions.length?subscriptions.map(item=>`<article class="subscriber-row"><a href="mailto:${encodeURIComponent(item.email)}">${escapeHTML(item.email)}</a><time>${item.subscribedAt?new Date(item.subscribedAt).toLocaleDateString('en-GB'):'?'}</time></article>`).join(''):'<div class="inventory-empty">No newsletter subscribers yet.</div>';subscriberMessage.textContent='';}
+  catch(error){subscriberList.replaceChildren();subscriberMessage.textContent=error.message;}
+}
 async function connectAdmin(candidate){
   adminToken=candidate;
   const status=await api('/api/admin/status');
@@ -51,6 +59,7 @@ async function connectAdmin(candidate){
   serviceStatus.classList.toggle('ready',ready);
   serviceStatus.innerHTML=`<strong>${ready?'Services ready':'Setup needed'}</strong><span>MongoDB: ${status.mongoConnected?'connected':escapeHTML(status.mongoMessage||'not connected')}</span><span>Cloudinary: ${status.cloudinaryConfigured?'configured':'not configured'}</span>${status.cloudinaryConfigured?'':'<span>Set Cloudinary credentials in your server environment before uploading.</span>'}`;
   await loadProducts();
+  await loadSubscribers();
 }
 function cancelEdit(){
   editingId='';productForm.reset();productForm.elements.group.value='';
@@ -68,6 +77,7 @@ function editProduct(product){
   productForm.elements.price.value=product.price??'';
   productForm.elements.inventory.value=product.inventory??0;
   productForm.elements.description.value=product.description||'';
+  productForm.elements.deliveryReturns.value=product.deliveryReturns||'';
   const categorySelect=productForm.elements.category;
   let option=[...categorySelect.options].find(item=>item.value===product.category);
   if(!option){option=new Option(product.category,product.category);option.dataset.group=product.group||'';categorySelect.add(option)}
@@ -102,6 +112,7 @@ document.querySelector('#admin-login-form').addEventListener('submit',async even
   catch(error){showLogin(error.message);adminToken='';sessionStorage.removeItem(tokenKey);}
 });
 document.querySelector('#admin-logout').addEventListener('click',()=>{sessionStorage.removeItem(tokenKey);adminToken='';showLogin('You have signed out.')});
+document.querySelector('#refresh-subscribers').addEventListener('click',loadSubscribers);
 document.querySelector('#refresh-products').addEventListener('click',async event=>{
   event.currentTarget.disabled=true;
   try{await loadProducts();}catch(error){productMessage.textContent=error.message;}

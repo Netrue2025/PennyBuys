@@ -1,6 +1,7 @@
 const products=window.STORE_PRODUCTS||[];
 const id=new URLSearchParams(location.search).get('id');
 const product=products.find(item=>item.id===id);
+const escapeHTML=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const money=value=>`£${Number(value).toFixed(2)}`;
 const bagKey='pennybuys-bag';
 const bagCount=document.querySelector('.commerce-bag-count');
@@ -59,11 +60,37 @@ else{
   }[product.id]||{description:product.alt,points:['Thoughtfully selected for everyday use','A lovely gift or treat for yourself','Ready to become one of your everyday favourites'],care:'Wipe clean gently and store in a cool, dry place.'};
   const productDescription=product.description||details.description;
   document.querySelector('#detail-description').textContent=productDescription;
+  document.querySelector('#detail-delivery-returns').textContent=product.deliveryReturns||document.querySelector('#detail-delivery-returns').textContent;
   document.querySelector('#detail-full-description').textContent=productDescription;
   document.querySelector('#detail-highlights').innerHTML=details.points.map(point=>`<li>${point}</li>`).join('');
   document.querySelector('#detail-care').textContent=details.care;
   const related=products.filter(item=>item.id!==product.id&&(item.group===product.group||item.category===product.category)).slice(0,4);
   document.querySelector('#related-grid').innerHTML=related.map(item=>`<a class="related-card" href="product.html?id=${encodeURIComponent(item.id)}"><img src="${item.image}" alt="${item.alt}" loading="lazy"><span>${item.category}</span><b>${item.name}</b><strong>${money(item.price)}</strong></a>`).join('');
+  const reviewList=document.querySelector('#product-reviews');
+  const reviewMessage=document.querySelector('#review-message');
+  const renderReviews=reviews=>{
+    const count=reviews.length;
+    const average=count?reviews.reduce((sum,review)=>sum+Number(review.rating),0)/count:0;
+    document.querySelector('#review-average').textContent=count?`${average.toFixed(1)} / 5`:'No ratings yet';
+    document.querySelector('#review-count').textContent=`${count} ${count===1?'review':'reviews'}`;
+    document.querySelector('#detail-rating').textContent=count?average.toFixed(1):'?';
+    document.querySelector('#detail-reviews').textContent=`(${count} ${count===1?'review':'reviews'})`;
+    reviewList.innerHTML=count?reviews.map(review=>`<article class="customer-review"><div class="customer-review-top"><strong>${escapeHTML(review.name)}</strong><span class="review-stars" aria-label="${Number(review.rating)} out of 5 stars">${'★'.repeat(Number(review.rating))}${'☆'.repeat(5-Number(review.rating))}</span></div><time>${review.createdAt?new Date(review.createdAt).toLocaleDateString('en-GB'):'Recently'}</time><p>${escapeHTML(review.text)}</p></article>`).join(''):'<p class="no-reviews">No customer reviews yet. Be the first to share your experience.</p>';
+  };
+  const fetchReviews=async()=>{
+    const response=await fetch(`/api/products/${encodeURIComponent(product.id)}/reviews`);
+    const data=await response.json().catch(()=>({}));
+    if(!response.ok)throw new Error(data.error||'Reviews are temporarily unavailable.');
+    renderReviews(data.reviews||[]);
+  };
+  fetchReviews().catch(error=>{reviewList.textContent=error.message;document.querySelector('#review-average').textContent='Reviews unavailable';document.querySelector('#review-count').textContent='';});
+  document.querySelector('#review-form').addEventListener('submit',async event=>{
+    event.preventDefault();const form=event.currentTarget;const submit=form.querySelector('button[type=submit]');submit.disabled=true;reviewMessage.textContent='Submitting your review...';
+    const values=Object.fromEntries(new FormData(form).entries());
+    try{const response=await fetch(`/api/products/${encodeURIComponent(product.id)}/reviews`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(values)});const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.error||'Your review could not be saved.');form.reset();await fetchReviews();reviewMessage.textContent='Thank you. Your review has been published.';}
+    catch(error){reviewMessage.textContent=error.message;}
+    finally{submit.disabled=false;}
+  });
   let qty=1;
   document.querySelectorAll('[data-qty-step]').forEach(button=>button.addEventListener('click',()=>{qty=Math.max(1,Math.min(20,qty+Number(button.dataset.qtyStep)));document.querySelector('#detail-qty').value=qty;document.querySelector('#detail-qty').textContent=qty}));
   document.querySelector('#detail-add').addEventListener('click',()=>{addProduct(product.id,qty);const message=document.querySelector('#detail-added');message.textContent=`${qty} \u00d7 ${product.name} added to your basket.`;document.querySelector('#detail-add').textContent='Added to basket';setTimeout(()=>document.querySelector('#detail-add').textContent='Add to bag',1400)});
