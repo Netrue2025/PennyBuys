@@ -145,7 +145,8 @@
       const promotion = config.freeDelivery;
       const announcements = Array.isArray(config.announcements) ? config.announcements.map(item => String(item || '').trim()).filter(Boolean) : [];
       if (promotion?.enabled) announcements.unshift(promotion.title || `Pick ${Math.max(1, Number(promotion.itemCount) || 3)} items for free delivery`);
-      if (announcements.length) {
+      const isLandingPage = location.pathname === '/' || location.pathname.endsWith('/index.html');
+      if (announcements.length && isLandingPage) {
         const anchor = document.querySelector('.hero, .catalog-intro, .catalog-main') || document.querySelector('.commerce-header');
         if (anchor && !document.querySelector('.commercial-promo-strip')) {
           const strip = document.createElement('aside');
@@ -153,7 +154,7 @@
           const text = announcements.join(' · ');
           strip.setAttribute('role', 'note');
           strip.setAttribute('aria-label', text);
-          strip.innerHTML = '<span class="commercial-promo-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 7h12v11H3zM15 11h4l3 3v4h-7zM7 18a2 2 0 1 0 4 0m6 0a2 2 0 1 0 4 0"/></svg></span><div class="commercial-promo-window"><div class="commercial-promo-track"></div></div><span class="commercial-promo-spark" aria-hidden="true">✦</span>';
+          strip.innerHTML = '<span class="commercial-promo-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m12 2-4 5h2l-5 6h4l-4 6h14l-4-6h4l-5-6h2z"/><path d="M11 19v3h2v-3"/></svg></span><div class="commercial-promo-window"><div class="commercial-promo-track"></div></div><span class="commercial-promo-spark" aria-hidden="true">❄</span>';
           const track = strip.querySelector('.commercial-promo-track');
           [...announcements, ...announcements].forEach((message, index) => {
             const item = document.createElement('span');
