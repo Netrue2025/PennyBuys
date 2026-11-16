@@ -30,6 +30,8 @@ function showLogin(message=''){
 }
 function showDashboard(){
   loginPanel.hidden=true;dashboard.hidden=false;document.querySelector('#admin-logout').hidden=false;
+  document.querySelector('#admin-user-state').textContent='MongoDB secured';
+  if(location.hash)requestAnimationFrame(()=>document.querySelector(location.hash)?.scrollIntoView({behavior:'smooth',block:'start'}));
 }
 async function api(path,options={}){
   const response=await fetch(path,{...options,headers:{...(options.headers||{}),'x-admin-token':adminToken}});
@@ -41,12 +43,16 @@ async function api(path,options={}){
 function renderProducts(products){
   catalogProducts=products;
   productCount.textContent=products.length;
-  productList.innerHTML=products.length?products.map(product=>`<article class="inventory-card"><img src="${escapeHTML(product.image)}" alt="" loading="lazy"><div><h3>${escapeHTML(product.name)}</h3><p>${escapeHTML(product.category)}${product.video?' | video':''}</p><small>Stock: ${Number(product.inventory??0)} | ${Number(product.gallery?.length||0)+1} image${product.gallery?.length?'s':''}</small></div><strong>GBP ${Number(product.price).toFixed(2)}</strong><div class="inventory-actions"><button class="quiet-button" type="button" data-edit-id="${escapeHTML(product.id)}" aria-label="Edit ${escapeHTML(product.name)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 16.5-.8 4.3 4.3-.8L20 7.5 16.5 4zM14.8 5.7l3.5 3.5"/></svg><span>Edit</span></button><button class="delete-button" type="button" data-delete-id="${escapeHTML(product.id)}" aria-label="Delete ${escapeHTML(product.name)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M6 7l1 14h10l1-14M9 7V4h6v3"/></svg><span>Delete</span></button></div></article>`).join(''):'<div class="inventory-empty">No products yet.</div>';
+  document.querySelector('#nav-product-count').textContent=products.length;
+  const query=(document.querySelector('#product-search')?.value||'').trim().toLocaleLowerCase('en-GB');
+  const filtered=products.filter(product=>!query||`${product.name} ${product.category} ${product.group||''} ${product.description||''}`.toLocaleLowerCase('en-GB').includes(query));
+  productList.innerHTML=filtered.length?filtered.map(product=>`<article class="inventory-card"><img src="${escapeHTML(product.image)}" alt="" loading="lazy"><div><h3>${escapeHTML(product.name)}</h3><p>${escapeHTML(product.category)}${product.video?' | video':''}</p><small>Stock: ${Number(product.inventory??0)} | ${Number(product.gallery?.length||0)+1} image${product.gallery?.length?'s':''}</small></div><strong>GBP ${Number(product.price).toFixed(2)}</strong><div class="inventory-actions"><button class="quiet-button" type="button" data-edit-id="${escapeHTML(product.id)}" aria-label="Edit ${escapeHTML(product.name)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 16.5-.8 4.3 4.3-.8L20 7.5 16.5 4zM14.8 5.7l3.5 3.5"/></svg><span>Edit</span></button><button class="delete-button" type="button" data-delete-id="${escapeHTML(product.id)}" aria-label="Delete ${escapeHTML(product.name)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M6 7l1 14h10l1-14M9 7V4h6v3"/></svg><span>Delete</span></button></div></article>`).join(''):'<div class="inventory-empty">'+(products.length?'No products match that search. Try another name or category.':'No products yet.')+'</div>';
+  window.dispatchEvent(new CustomEvent('pennybuys:adminproductschange',{detail:{products}}));
 }
 async function loadProducts(){renderProducts(await api('/api/products'));}
 async function loadSubscribers(){
   subscriberMessage.textContent='Loading subscribers...';
-  try{const data=await api('/api/admin/newsletter-subscriptions');const subscriptions=data.subscriptions||[];subscriberCount.textContent=subscriptions.length;document.querySelector('#nav-subscriber-count').textContent=subscriptions.length;subscriberList.innerHTML=subscriptions.length?subscriptions.map(item=>`<article class="subscriber-row"><a href="mailto:${encodeURIComponent(item.email)}">${escapeHTML(item.email)}</a><time>${item.subscribedAt?new Date(item.subscribedAt).toLocaleDateString('en-GB'):'?'}</time></article>`).join(''):'<div class="inventory-empty">No newsletter subscribers yet.</div>';subscriberMessage.textContent='';}
+  try{const data=await api('/api/admin/newsletter-subscriptions');const subscriptions=data.subscriptions||[];subscriberCount.textContent=subscriptions.length;document.querySelector('#nav-subscriber-count').textContent=subscriptions.length;subscriberList.innerHTML=subscriptions.length?subscriptions.map(item=>`<article class="subscriber-row"><a href="mailto:${encodeURIComponent(item.email)}">${escapeHTML(item.email)}</a><time>${item.subscribedAt?new Date(item.subscribedAt).toLocaleDateString('en-GB'):'?'}</time></article>`).join(''):'<div class="inventory-empty">No newsletter subscribers yet.</div>';subscriberMessage.textContent='';window.dispatchEvent(new CustomEvent('pennybuys:adminsubscriberschange',{detail:{count:subscriptions.length}}));}
   catch(error){subscriberList.replaceChildren();subscriberMessage.textContent=error.message;}
 }
 async function connectAdmin(candidate){
@@ -60,6 +66,7 @@ async function connectAdmin(candidate){
   serviceStatus.innerHTML=`<strong>${ready?'Services ready':'Setup needed'}</strong><span>MongoDB: ${status.mongoConnected?'connected':escapeHTML(status.mongoMessage||'not connected')}</span><span>Cloudinary: ${status.cloudinaryConfigured?'configured':'not configured'}</span>${status.cloudinaryConfigured?'':'<span>Set Cloudinary credentials in your server environment before uploading.</span>'}`;
   await loadProducts();
   await loadSubscribers();
+  window.dispatchEvent(new Event('pennybuys:adminready'));
 }
 function cancelEdit(){
   editingId='';productForm.reset();productForm.elements.group.value='';
@@ -70,6 +77,7 @@ function cancelEdit(){
   document.querySelector('#cancel-edit').hidden=true;
   document.querySelector('#image-preview').replaceChildren();
   productMessage.textContent='';productMessage.classList.remove('success');
+  window.dispatchEvent(new Event('pennybuys:productcancel'));
 }
 function editProduct(product){
   editingId=product.id;productForm.dataset.editId=product.id;
@@ -90,6 +98,7 @@ function editProduct(product){
   document.querySelector('#save-product').textContent='Save product changes';
   document.querySelector('#cancel-edit').hidden=false;
   productMessage.textContent='';productMessage.classList.remove('success');
+  window.dispatchEvent(new Event('pennybuys:productedit'));
   productForm.scrollIntoView({behavior:'smooth',block:'start'});
 }
 function renderMediaEditor(){
@@ -119,6 +128,7 @@ document.querySelector('#refresh-products').addEventListener('click',async event
   event.currentTarget.disabled=false;
 });
 document.querySelector('#cancel-edit').addEventListener('click',cancelEdit);
+window.addEventListener('pennybuys:startnewproduct',cancelEdit);
 let pendingDeleteProduct=null;
 const deleteDialog=document.querySelector('#delete-product-dialog');
 const confirmDeleteButton=document.querySelector('#confirm-delete-product');
@@ -134,6 +144,7 @@ productList.addEventListener('click',async event=>{
   document.querySelector('#delete-message').textContent='';
   deleteDialog.showModal();
 });
+window.addEventListener('pennybuys:adminproductsearch',()=>renderProducts(catalogProducts));
 confirmDeleteButton.addEventListener('click',async()=>{
   const product=pendingDeleteProduct;
   if(!product)return;
@@ -161,6 +172,7 @@ imageInput.addEventListener('change',event=>{
 videoInput.addEventListener('change',()=>{if(videoInput.files[0]){currentVideoUrl='';productForm.elements.removeVideo.checked=false;}renderMediaEditor()});
 productForm.addEventListener('submit',async event=>{
   event.preventDefault();productMessage.classList.remove('success');
+  for(const field of productForm.querySelectorAll('[required]'))if(!field.checkValidity()){const step=field.closest('[data-form-step]');if(step)window.PennyBuysAdminWizard?.goToStep(Number(step.dataset.formStep));field.reportValidity();return;}
   if(!mediaItems.length){productMessage.textContent='Keep at least one product image. The first image is used as the storefront preview.';imageInput.focus();return;}
   if(mediaItems.length>5){productMessage.textContent='Keep no more than five product images. Remove an image or upload fewer files.';return;}
   productMessage.textContent=editingId?'Saving product changes...':'Uploading media and saving product...';

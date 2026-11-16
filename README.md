@@ -47,7 +47,7 @@ For Railway's optional deployment health check, use `/health`. In service Networ
 - Sign-in and sign-up pages provide local prototype accounts; the email-link option creates a demo link in the same browser and does not send email.
 - Newsletter signup shows a local confirmation only. It does not collect or send email addresses.
 - Demo checkout creates an order record in the current browser, then shows a confirmation with a direct order status link.
-- Customers can look up an order using its number and checkout email. Staff can use `admin-orders.html` to change status and add the tracking number shown to the customer once the order is on the way.
+- Customers can look up an order using its number and checkout email. Staff can use the Orders section in `admin-products.html` to change status and add the tracking number shown to the customer once the order is on the way. `admin-orders.html` redirects to that section.
 - Order statuses are: Order is being processed, Packed and ready for delivery, On the way for delivery, and Delivered.
 - Checkout and order management are front-end demos. Orders and status updates are stored in the current browser only; payment is not connected.
 - Existing demo product photography is loaded from Unsplash. New admin uploads are stored in Cloudinary and appear in the storefront catalog.
