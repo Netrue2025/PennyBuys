@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#102d65">
+  <meta name="description" content="Shop thoughtful everyday finds with the PennyBuys app.">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="PennyBuys">
+  <title>Shop the app — PennyBuys</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="/Media/pennybuys-app-icon.svg">
+  <link rel="apple-touch-icon" href="/Media/pennybuys-logo.png">
+  <link rel="stylesheet" href="currency.css">
+  <link rel="stylesheet" href="shopping-app.css">
+  <link rel="stylesheet" href="pwa.css">
+</head>
+<body class="app-shell">
+  <header class="app-header">
+    <a class="app-brand" href="app.html" aria-label="PennyBuys app home"><img src="Media/pennybuys-logo.png" alt="PennyBuys"></a>
+    <div class="app-header-actions">
+      <a class="app-header-icon" href="order.html" aria-label="Track an order"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v13H4zM8 4v6m8-6v6M8 14h8"/></svg></a>
+      <a class="app-header-icon app-header-bag" href="basket.html" aria-label="Your basket"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h14l1 13H4L5 8Z"/><path d="M9 9V6a3 3 0 0 1 6 0v3"/></svg><span class="app-bag-count">0</span></a>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <section class="app-welcome">
+      <p class="app-eyebrow">A LITTLE MORE LOVELY</p>
+      <h1>Find your next<br><em>everyday favourite.</em></h1>
+      <p>Thoughtful finds, chosen with care.</p>
+      <form id="app-search-form" class="app-search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5"/></svg><input id="app-search-input" type="search" placeholder="What are you looking for?" autocomplete="off"><button type="submit" aria-label="Search">Search</button></form>
+    </section>
+
+    <section class="app-categories" aria-label="Shop categories">
+      <div class="app-section-heading"><div><p class="app-eyebrow">A GOOD PLACE TO START</p><h2>Shop by category</h2></div><a href="catalog.html">See all</a></div>
+      <div class="app-category-list" id="app-category-list"></div>
+    </section>
+
+    <section id="app-products-section" class="app-products-section" aria-labelledby="app-products-heading">
+      <div class="app-section-heading"><div><p class="app-eyebrow">THE GOOD STUFF</p><h2 id="app-products-heading">Little things. Big love.</h2></div><a href="catalog.html">Shop all <span aria-hidden="true">→</span></a></div>
+      <p id="app-results-note" class="app-results-note" aria-live="polite">Thoughtful finds for everyday living.</p>
+      <div id="app-product-grid" class="app-product-grid" aria-live="polite"><div class="app-loading"><span></span>Finding lovely things...</div></div>
+      <div id="app-empty-state" class="app-empty-state" hidden><span aria-hidden="true">✳</span><h3>No finds just yet</h3><p>Try another search or browse all the good stuff.</p><a href="catalog.html" class="app-primary-link">Explore all products</a></div>
+    </section>
+
+    <section class="app-help-card"><span class="app-help-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H8l-4 2v-5.5A7.5 7.5 0 1 1 20 11.5Z"/><path d="M8 11h8M8 14h5"/></svg></span><div><b>Need a hand?</b><p>Our team is here to help with products and orders.</p></div><a href="contact.html" aria-label="Contact PennyBuys">Chat <span aria-hidden="true">→</span></a></section>
+    <div id="app-install-help" class="app-install-help" hidden></div>
+  </main>
+
+  <nav class="app-bottom-nav" aria-label="App navigation">
+    <a class="is-current" href="app.html" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10H3zM9 20v-7h6v7"/></svg><span>Home</span></a>
+    <a href="catalog.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h16"/><circle cx="8" cy="5" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="10" cy="19" r="2"/></svg><span>Explore</span></a>
+    <a href="basket.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h14l1 13H4L5 8Z"/><path d="M9 9V6a3 3 0 0 1 6 0v3"/></svg><span>Basket</span><i class="app-bottom-count">0</i></a>
+    <a href="order.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v13H4zM8 4v6m8-6v6M8 14h8"/></svg><span>Orders</span></a>
+    <a href="signin.html"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 21c.5-4.5 3.2-6.8 7.5-6.8s7 2.3 7.5 6.8"/></svg><span>Account</span></a>
+  </nav>
+  <div class="app-toast" role="status" aria-live="polite"></div>
+
+  <script src="image-fallback.js"></script>
+  <script src="products-data.js"></script>
+  <script src="currency.js"></script>
+  <script src="push-client.js"></script>
+  <script src="shopping-app.js"></script>
+  <script src="pwa.js"></script>
+</body>
+</html>

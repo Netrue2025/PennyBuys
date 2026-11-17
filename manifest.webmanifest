@@ -1,0 +1,19 @@
+{
+  "id": "/app.html",
+  "name": "PennyBuys — Thoughtful finds for everyday living",
+  "short_name": "PennyBuys",
+  "description": "Shop thoughtful everyday finds, manage your basket and follow your PennyBuys orders.",
+  "lang": "en-GB",
+  "start_url": "/app.html",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait-primary",
+  "background_color": "#f7f8fb",
+  "theme_color": "#102d65",
+  "categories": ["shopping", "lifestyle"],
+  "icons": [
+    { "src": "/Media/pennybuys-app-icon.svg", "sizes": "192x192 512x512", "type": "image/svg+xml", "purpose": "any maskable" },
+    { "src": "/Media/pennybuys-logo.png", "sizes": "any", "type": "image/png", "purpose": "any" }
+  ]
+}

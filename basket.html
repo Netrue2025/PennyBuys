@@ -14,6 +14,8 @@
   <meta property="og:image:alt" content="PennyBuys shopping logo">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:image" content="https://pennybuys.co.uk/Media/pennybuys-logo.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="pwa.css">
 </head>
 <body class="commerce-page basket-page">
   <header class="commerce-header">
@@ -33,8 +35,10 @@
       <aside class="basket-summary"><h2>Order summary</h2><div class="summary-row"><span>Subtotal</span><b id="basket-subtotal"></b></div><div id="basket-discount-row" class="summary-row offer-savings-row" hidden><span id="basket-discount-label">Saved offer</span><b id="basket-discount"></b></div><div class="summary-row"><span id="basket-delivery-label">Delivery</span><b id="basket-delivery"></b></div><div class="summary-total"><span>Total</span><b id="basket-total"></b></div><p id="basket-summary-note" class="summary-note">Delivery is calculated from basket weight.</p><a id="basket-checkout" class="commerce-primary basket-checkout" href="checkout.html">Continue to checkout <span aria-hidden="true">&#8594;</span></a></aside>
     </div>
   </main>
-  <footer class="commerce-footer"><a href="index.html">PennyBuys</a><span>Thoughtful finds for everyday living.</span><a href="order.html">Track an order</a></footer>
+  <footer class="commerce-footer"><a href="index.html">PennyBuys</a><span>Thoughtful finds for everyday living.</span><a href="order.html">Track an order</a><a class="footer-app-link" href="app.html">Download the PennyBuys app</a></footer>
   <script src="image-fallback.js"></script><script src="products-data.js"></script><script src="delivery-pricing.js"></script><script src="basket.js"></script>
 <script src="currency.js"></script>
+  <script src="push-client.js"></script>
+  <script src="pwa.js"></script>
 </body>
 </html>

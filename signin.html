@@ -5,11 +5,15 @@
   <meta property="og:image:alt" content="PennyBuys shopping logo">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:image" content="https://pennybuys.co.uk/Media/pennybuys-logo.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="pwa.css">
 </head>
 <body class="commerce-page auth-page" data-auth-mode="signin"><header class="commerce-header"><a class="commerce-logo" href="index.html" aria-label="PennyBuys home"><img src="Media/pennybuys-logo.png" alt="PennyBuys"></a><a class="commerce-back" href="index.html">‹ <span>Back to shop</span></a><a class="auth-header-link" href="signup.html">Create account</a></header>
 <main class="auth-main"><section class="auth-card"><div class="eyebrow">WELCOME BACK</div><h1>Sign in to PennyBuys</h1><p class="auth-intro">Good to see you again. Sign in to continue.</p>
   <form id="password-form" class="auth-form"><label>Email address<input type="email" name="email" autocomplete="email" required placeholder="you@example.com"></label><label>Password<span class="password-wrap"><input type="password" name="password" autocomplete="current-password" required placeholder="Your password"><button class="password-toggle" type="button" aria-label="Show password">Show</button></span></label><button class="commerce-primary auth-submit" type="submit">Sign in</button></form>
   <div class="auth-divider"><span>or</span></div><button class="google-auth-button" type="button" data-google-auth><svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#4285F4" d="M43.6 24.5c0-1.4-.1-2.8-.4-4.1H24v7.8h11c-.5 2.5-1.9 4.6-4.1 6v5h6.6c3.9-3.6 6.1-8.7 6.1-14.7z"/><path fill="#34A853" d="M24 44c5.5 0 10.1-1.8 13.5-4.8l-6.6-5c-1.8 1.2-4.1 1.9-6.9 1.9-5.3 0-9.8-3.6-11.4-8.4h-6.8v5.2C9.2 39.6 16 44 24 44z"/><path fill="#FBBC05" d="M12.6 27.7a12 12 0 0 1 0-7.4v-5.2H5.8a20 20 0 0 0 0 17.8l6.8-5.2z"/><path fill="#EA4335" d="M24 12.1c3 0 5.7 1 7.8 3.1l5.8-5.8C34.1 6.1 29.5 4 24 4 16 4 9.2 8.4 5.8 15.1l6.8 5.2c1.6-4.8 6.1-8.2 11.4-8.2z"/></svg>Continue with Google</button>
   <p id="auth-message" class="auth-message" role="status" aria-live="polite"></p><p class="auth-switch">New to PennyBuys? <a href="signup.html">Create an account</a></p><p class="auth-legal">By continuing, you agree to our <a href="index.html#footer">Terms</a> and <a href="privacy-policy.html">Privacy Policy</a>.</p><p class="auth-demo-note">Your account is securely stored for PennyBuys sign-in and reviews.</p>
-</section><p class="auth-bottom"><a href="index.html">← Return to shopping</a></p></main><footer class="auth-footer"><span>© 2026 PennyBuys</span><a href="contact.html">Help</a></footer><script src="auth.js"></script><script src="currency.js"></script>
+</section><p class="auth-bottom"><a href="index.html">← Return to shopping</a></p></main><footer class="auth-footer"><span>© 2026 PennyBuys</span><a href="contact.html">Help</a><a class="footer-app-link" href="app.html">Download the PennyBuys app</a></footer><script src="auth.js"></script><script src="currency.js"></script>
+  <script src="push-client.js"></script>
+  <script src="pwa.js"></script>
 </body></html>

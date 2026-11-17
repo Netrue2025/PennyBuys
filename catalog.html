@@ -14,6 +14,8 @@
   <meta property="og:image:alt" content="PennyBuys shopping logo">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:image" content="https://pennybuys.co.uk/Media/pennybuys-logo.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="pwa.css">
 </head>
 <body class="catalog-page">
   <div class="utility-bar"><span>Hi! <a href="signin.html" class="signin-link">Sign in</a> or <a href="signup.html" class="signin-link">register</a></span><div><a href="index.html#shop">Deals</a><a href="index.html#story">About PennyBuys</a><a href="#footer">Help &amp; Contact</a><span class="deliver-to">Deliver to <b>UK</b></span></div></div>
@@ -36,11 +38,13 @@
     <section id="catalog-empty" class="catalog-empty" hidden><span>We couldn't find a match this time.</span><p>Try a different search, or browse all of our finds.</p><a class="button button-dark" href="catalog.html">Shop all products <span aria-hidden="true">&rarr;</span></a></section>
   </main>
 
-  <footer class="catalog-footer" id="footer"><a class="wordmark" href="index.html" aria-label="PennyBuys home"><img src="Media/pennybuys-logo.png" alt="PennyBuys"></a><span>Thoughtful finds for everyday living.</span><a href="index.html">Back to home</a></footer>
+  <footer class="catalog-footer" id="footer"><a class="wordmark" href="index.html" aria-label="PennyBuys home"><img src="Media/pennybuys-logo.png" alt="PennyBuys"></a><span>Thoughtful finds for everyday living.</span><a href="index.html">Back to home</a><a class="footer-app-link" href="app.html">Download the PennyBuys app</a></footer>
   <div class="catalog-toast" role="status" aria-live="polite"></div>
   <script src="image-fallback.js"></script>
   <script src="products-data.js"></script>
   <script src="catalog-page.js"></script>
 <script src="currency.js"></script>
+  <script src="push-client.js"></script>
+  <script src="pwa.js"></script>
 </body>
 </html>

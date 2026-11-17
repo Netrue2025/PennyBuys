@@ -61,3 +61,11 @@ Basket contents remain in browser storage, while customer accounts and order rec
 - Customers can opt in to browser alerts at checkout or on the contact page. Staff can enable new chat and order alerts from the Support chat page. Admins can also send an important update from Commercials. New arrivals and order status changes trigger push notifications for matching subscriptions.
 - Browser push requires HTTPS and VAPID keys. Generate a key pair with `npx web-push generate-vapid-keys`, then set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` in Railway Variables (or local `.env`). Keep the private key secret and do not commit it. The browser permission prompt is shown only after a customer or staff member chooses to enable alerts.
 - Push alerts are optional; customers can still browse, chat and track their order when browser push is unavailable. The payment method is still a demo and is not connected to a payment processor.
+
+
+## Installable PennyBuys shopping app
+
+- `app.html` is the compact installable shopping experience. It supports product search, category browsing and quick add-to-basket, with links to the existing product details, basket, checkout, order tracking and account pages.
+- The site footer links to the app. A slim install banner appears for visitors who have not installed it; Chromium browsers can open the native install prompt, and iPhone visitors are guided to Add to Home Screen.
+- The app shell and public product catalogue are cached for basic offline browsing. Checkout, live inventory, chat and order tracking require a connection.
+- Visitors are offered an optional browser-notification prompt after 40 seconds of browsing. Push remains opt-in and requires the VAPID variables described above.
