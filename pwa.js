@@ -17,6 +17,23 @@
   let installLink;
   let pushTimer;
 
+  function prepareFooterInstallLinks() {
+    document.querySelectorAll('footer .footer-app-link').forEach(link => {
+      link.classList.add('pwa-download-icon');
+      link.setAttribute('aria-label', 'Download the PennyBuys app');
+      link.title = 'Download the PennyBuys app';
+      link.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 16v4h14v-4"/></svg><span class="pwa-visually-hidden">Download the PennyBuys app</span>';
+      link.addEventListener('click', async event => {
+        if (standalone() || storage.get('pennybuys-app-installed') === 'yes' || !installPrompt) return;
+        event.preventDefault();
+        installPrompt.prompt();
+        const choice = await installPrompt.userChoice;
+        installPrompt = null;
+        if (choice?.outcome === 'accepted') hideInstallBar();
+      });
+    });
+  }
+
   function createAppNavigation() {
     if (!appContext || document.querySelector('.app-bottom-nav')) return;
     document.body.classList.add('pennybuys-app-context');
@@ -61,7 +78,7 @@
     installButton = installBar.querySelector('.pwa-install-action[hidden]');
     installLink = installBar.querySelector('.pwa-open-app');
     installBar.querySelector('.pwa-install-close').addEventListener('click', () => {
-      storage.set('pennybuys-install-dismissed-until', String(Date.now() + 30 * 24 * 60 * 60 * 1000));
+      try { sessionStorage.setItem('pennybuys-install-notice-shown', 'yes'); } catch {}
       hideInstallBar();
     });
     installButton.addEventListener('click', async () => {
@@ -72,9 +89,13 @@
       hideInstallBar();
     });
     window.setTimeout(() => {
-      const dismissedUntil = Number(storage.get('pennybuys-install-dismissed-until') || 0);
-      if (!standalone() && storage.get('pennybuys-app-installed') !== 'yes' && dismissedUntil < Date.now()) installBar.classList.add('is-visible');
-    }, 8500);
+      let shownThisVisit = false;
+      try { shownThisVisit = sessionStorage.getItem('pennybuys-install-notice-shown') === 'yes'; } catch {}
+      if (!standalone() && storage.get('pennybuys-app-installed') !== 'yes' && !shownThisVisit) {
+        try { sessionStorage.setItem('pennybuys-install-notice-shown', 'yes'); } catch {}
+        installBar.classList.add('is-visible');
+      }
+    }, 3500);
   }
   function hideInstallBar() { installBar?.classList.remove('is-visible'); }
   window.addEventListener('beforeinstallprompt', event => {
@@ -139,6 +160,7 @@
     pushTimer = window.setTimeout(showPushPrompt, remaining);
   }
 
+  prepareFooterInstallLinks();
   createAppNavigation();
   createInstallBar();
   schedulePushPrompt();
