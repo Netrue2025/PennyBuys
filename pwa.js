@@ -4,11 +4,47 @@
     set(key, value) { try { localStorage.setItem(key, value); } catch {} }
   };
   const standalone = () => window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  const appContextKey = 'pennybuys-app-context';
+  const pageName = location.pathname.split('/').pop() || 'index.html';
+  if (pageName === 'app.html' || standalone()) {
+    try { sessionStorage.setItem(appContextKey, 'yes'); } catch {}
+  }
+  let appContext = standalone() || pageName === 'app.html';
+  try { appContext = appContext || sessionStorage.getItem(appContextKey) === 'yes'; } catch {}
   let installPrompt = null;
   let installBar;
   let installButton;
   let installLink;
   let pushTimer;
+
+  function createAppNavigation() {
+    if (!appContext || document.querySelector('.app-bottom-nav')) return;
+    document.body.classList.add('pennybuys-app-context');
+    const destinations = [
+      { label: 'Home', href: '/app.html', pages: ['app.html'], icon: '<path d="m3 10 9-7 9 7v10H3zM9 20v-7h6v7"/>' },
+      { label: 'Explore', href: '/catalog.html', pages: ['catalog.html', 'product.html'], icon: '<path d="M4 5h16M4 12h16M4 19h16"/><circle cx="8" cy="5" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="10" cy="19" r="2"/>' },
+      { label: 'Basket', href: '/basket.html', pages: ['basket.html', 'checkout.html'], icon: '<path d="M5 8h14l1 13H4L5 8Z"/><path d="M9 9V6a3 3 0 0 1 6 0v3"/>' },
+      { label: 'Orders', href: '/order.html', pages: ['order.html'], icon: '<path d="M4 7h16v13H4zM8 4v6m8-6v6M8 14h8"/>' },
+      { label: 'Account', href: '/signin.html', pages: ['signin.html', 'signup.html'], icon: '<circle cx="12" cy="8" r="3.5"/><path d="M4.5 21c.5-4.5 3.2-6.8 7.5-6.8s7 2.3 7.5 6.8"/>' }
+    ];
+    const nav = document.createElement('nav');
+    nav.className = 'app-bottom-nav';
+    nav.setAttribute('aria-label', 'App navigation');
+    nav.innerHTML = destinations.map(item => {
+      const active = item.pages.includes(pageName);
+      return `<a href="${item.href}"${active ? ' class="is-current" aria-current="page"' : ''}><svg viewBox="0 0 24 24" aria-hidden="true">${item.icon}</svg><span>${item.label}</span>${item.label === 'Basket' ? '<i class="app-bottom-count" hidden>0</i>' : ''}</a>`;
+    }).join('');
+    document.body.append(nav);
+    const updateCount = () => {
+      let count = 0;
+      try { const bag = JSON.parse(localStorage.getItem('pennybuys-bag') || '[]'); if (Array.isArray(bag)) count = bag.reduce((sum, item) => sum + (Number(item.qty) || 0), 0); } catch {}
+      const badge = nav.querySelector('.app-bottom-count');
+      badge.textContent = String(count);
+      badge.hidden = count < 1;
+    };
+    updateCount();
+    window.addEventListener('storage', event => { if (event.key === 'pennybuys-bag') updateCount(); });
+  }
 
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/service-worker.js', { scope: '/' }).catch(error => console.warn('PennyBuys offline support is unavailable:', error.message));
 
@@ -103,6 +139,7 @@
     pushTimer = window.setTimeout(showPushPrompt, remaining);
   }
 
+  createAppNavigation();
   createInstallBar();
   schedulePushPrompt();
   window.addEventListener('pagehide', () => window.clearTimeout(pushTimer), { once: true });

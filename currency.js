@@ -344,6 +344,7 @@
     }
   }
   function makeWhatsApp() {
+    if (location.pathname.split('/').pop() !== 'contact.html') return;
     if (document.querySelector('.whatsapp-float')) return;
     const link = document.createElement('a');
     link.className = 'whatsapp-float';
