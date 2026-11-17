@@ -26,12 +26,28 @@
   </header>
 
   <main class="app-main">
-    <section class="app-welcome">
-      <p class="app-eyebrow">A LITTLE MORE LOVELY</p>
-      <h1>Find your next<br><em>everyday favourite.</em></h1>
-      <p>Thoughtful finds, chosen with care.</p>
-      <form id="app-search-form" class="app-search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5"/></svg><input id="app-search-input" type="search" placeholder="What are you looking for?" autocomplete="off"><button type="submit" aria-label="Search">Search</button></form>
+    <section class="app-ad-carousel" aria-label="PennyBuys featured offers" data-app-carousel>
+      <div class="app-ad-slides">
+        <article class="app-ad-slide is-active" aria-hidden="false">
+          <div class="app-ad-copy"><p class="app-eyebrow">EVERYDAY FAVOURITES</p><h1>A good bag goes everywhere.</h1><p>Meet the pieces made to come along for all of it.</p><a class="app-ad-link" href="catalog.html?category=Bags">Shop bags &amp; accessories <span aria-hidden="true">?</span></a></div>
+          <div class="app-ad-visual"><div class="app-ad-image-grid"><img class="app-ad-image-main" src="https://images.unsplash.com/photo-1548036328-c9fa89d128fa?auto=format&amp;fit=crop&amp;w=1100&amp;q=85" alt="Everyday handbag in warm tan leather"><img src="https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&amp;fit=crop&amp;w=600&amp;q=80" alt="Structured handbag detail"><img src="https://images.unsplash.com/photo-1590874103328-eac38a683ce7?auto=format&amp;fit=crop&amp;w=600&amp;q=80" alt="Compact everyday bag"></div><span class="app-ad-tag">THE EVERYDAY EDIT</span></div>
+        </article>
+        <article class="app-ad-slide" aria-hidden="true" inert>
+          <div class="app-ad-copy"><p class="app-eyebrow">A LITTLE SOMETHING UNDER ?20</p><h1>Small gifts. Big smiles.</h1><p>Thoughtful little finds for them, for you, or just because.</p><a class="app-ad-link" href="catalog.html?category=Gifts">Shop little gifts <span aria-hidden="true">?</span></a></div>
+          <div class="app-ad-visual"><div class="app-ad-image-grid"><img class="app-ad-image-main" src="https://images.unsplash.com/photo-1513201099705-a9746e1e201f?auto=format&amp;fit=crop&amp;w=1100&amp;q=85" alt="Thoughtfully wrapped gifts ready to share"><img src="https://images.unsplash.com/photo-1549465220-1a8b9238cd48?auto=format&amp;fit=crop&amp;w=600&amp;q=80" alt="Colourful gift wrapping"><img src="https://images.unsplash.com/photo-1617038220319-276d3cfab638?auto=format&amp;fit=crop&amp;w=600&amp;q=80" alt="A small jewellery gift"></div><span class="app-ad-tag">GIFT IDEAS FROM ?11</span></div>
+        </article>
+        <article class="app-ad-slide" aria-hidden="true" inert>
+          <div class="app-ad-copy"><p class="app-eyebrow">READY WHEN YOU ARE</p><h1>Pack light. Go somewhere.</h1><p>Travel organisers and everyday essentials for your next little escape.</p><a class="app-ad-link" href="catalog.html?category=Travel">Shop travel essentials <span aria-hidden="true">?</span></a></div>
+          <div class="app-ad-visual"><div class="app-ad-image-grid"><img class="app-ad-image-main" src="https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&amp;fit=crop&amp;w=1100&amp;q=85" alt="Travel bag packed for a weekend away"><img src="https://images.unsplash.com/photo-1590874103328-eac38a683ce7?auto=format&amp;fit=crop&amp;w=600&amp;q=80" alt="Compact pouch tucked into a travel bag"><img src="https://images.unsplash.com/photo-1544816155-12df9643f363?auto=format&amp;fit=crop&amp;w=600&amp;q=80" alt="Canvas tote for a weekend trip"></div><span class="app-ad-tag">YOUR NEXT LITTLE ESCAPE</span></div>
+        </article>
+        <article class="app-ad-slide" aria-hidden="true" inert>
+          <div class="app-ad-copy"><p class="app-eyebrow">MAKE YOURSELF AT HOME</p><h1>Cosy little home comforts.</h1><p>Lovely details to make your space feel more like yours.</p><a class="app-ad-link" href="catalog.html?category=Home">Explore home &amp; living <span aria-hidden="true">?</span></a></div>
+          <div class="app-ad-visual"><div class="app-ad-image-grid"><img class="app-ad-image-main" src="https://images.unsplash.com/photo-1602874801007-bd458bb1b8b6?auto=format&amp;fit=crop&amp;w=1100&amp;q=85" alt="Soft candlelight for a cosy evening at home"><img src="https://images.unsplash.com/photo-1494438639946-1ebd1d20bf85?auto=format&amp;fit=crop&amp;w=600&amp;q=80" alt="A calm and organised home desk"><img src="https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&amp;fit=crop&amp;w=600&amp;q=80" alt="Warm living room details"></div><span class="app-ad-tag">LITTLE JOYS FOR HOME</span></div>
+        </article>
+      </div>
+      <div class="app-ad-controls"><button type="button" data-app-ad-prev aria-label="Previous promotion">?</button><div class="app-ad-dots" role="group" aria-label="Choose promotion"><button class="is-active" type="button" aria-label="Promotion 1" aria-current="true"></button><button type="button" aria-label="Promotion 2"></button><button type="button" aria-label="Promotion 3"></button><button type="button" aria-label="Promotion 4"></button></div><button type="button" data-app-ad-next aria-label="Next promotion">?</button><button type="button" data-app-ad-toggle aria-label="Pause automatic slides" aria-pressed="false">?</button></div>
     </section>
+    <form id="app-search-form" class="app-search app-search-compact"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5"/></svg><input id="app-search-input" type="search" placeholder="What are you looking for?" autocomplete="off"><button type="submit" aria-label="Search">Search</button></form>
 
     <section class="app-categories" aria-label="Shop categories">
       <div class="app-section-heading"><div><p class="app-eyebrow">A GOOD PLACE TO START</p><h2>Shop by category</h2></div><a href="catalog.html">See all</a></div>

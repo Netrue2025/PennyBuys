@@ -9,6 +9,49 @@
   let selectedCategory = 'All';
   let query = '';
   let toastTimer;
+  function setupAdCarousel() {
+    const carousel = document.querySelector('[data-app-carousel]');
+    if (!carousel) return;
+    const slides = [...carousel.querySelectorAll('.app-ad-slide')];
+    const dots = [...carousel.querySelectorAll('.app-ad-dots button')];
+    const toggle = carousel.querySelector('[data-app-ad-toggle]');
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let index = 0;
+    let paused = reduceMotion;
+    let pointerInside = false;
+    let focusInside = false;
+    const render = next => {
+      index = (next + slides.length) % slides.length;
+      slides.forEach((slide, i) => {
+        const active = i === index;
+        slide.classList.toggle('is-active', active);
+        slide.setAttribute('aria-hidden', String(!active));
+        if (active) slide.removeAttribute('inert'); else slide.setAttribute('inert', '');
+      });
+      dots.forEach((dot, i) => {
+        const active = i === index;
+        dot.classList.toggle('is-active', active);
+        if (active) dot.setAttribute('aria-current', 'true'); else dot.removeAttribute('aria-current');
+      });
+    };
+    const sync = () => {
+      toggle.textContent = paused ? '▶' : 'Ⅱ';
+      toggle.setAttribute('aria-label', paused ? 'Play automatic slides' : 'Pause automatic slides');
+      toggle.setAttribute('aria-pressed', String(paused));
+      return !(paused || pointerInside || focusInside || document.hidden);
+    };
+    carousel.querySelector('[data-app-ad-prev]').addEventListener('click', () => render(index - 1));
+    carousel.querySelector('[data-app-ad-next]').addEventListener('click', () => render(index + 1));
+    dots.forEach((dot, i) => dot.addEventListener('click', () => render(i)));
+    toggle.addEventListener('click', () => { paused = !paused; sync(); });
+    carousel.addEventListener('pointerenter', () => { pointerInside = true; sync(); });
+    carousel.addEventListener('pointerleave', () => { pointerInside = false; sync(); });
+    carousel.addEventListener('focusin', () => { focusInside = true; sync(); });
+    carousel.addEventListener('focusout', event => { if (!carousel.contains(event.relatedTarget)) { focusInside = false; sync(); } });
+    document.addEventListener('visibilitychange', sync);
+    sync();
+    window.setInterval(() => { if (sync()) render(index + 1); }, 5000);
+  }
   const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
   const money = value => window.PennyBuysCurrency?.format(Number(value) || 0) || `£${(Number(value) || 0).toFixed(2)}`;
   const groupNames = { Bags: 'Bags & accessories', Travel: 'Travel essentials', Home: 'Home & little joys' };
@@ -88,4 +131,5 @@
   renderCategories();
   renderProducts();
   updateBagCount();
+  setupAdCarousel();
 })();
