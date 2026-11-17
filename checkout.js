@@ -51,12 +51,8 @@ document.querySelector('#checkout-form').addEventListener('submit',async event=>
   submit.disabled=true;
   try{
     await promotionsPromise;
-    if(activeOffer){
-      const response=await fetch('/api/account/offers/redeem',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({offerId:activeOffer.offerId})});
-      const result=await response.json().catch(()=>({}));
-      if(!response.ok)throw new Error(result.error||'Your saved offer could not be applied. Refresh your basket and try again.');
-    }
     const data=Object.fromEntries(new FormData(event.currentTarget).entries());
+    if(document.querySelector('#checkout-push-optin')?.checked){try{await window.PennyBuysPush.subscribe({email:data.email.trim()})}catch(error){console.warn('Order push notifications were not enabled:',error.message)}}
     const now=new Date().toISOString();
     const deliveryInfo=window.PennyBuysDelivery.calculate(lines,deliveryConfig,itemCount,freeDeliveryCount);
     const delivery=deliveryInfo.amount;
@@ -71,10 +67,19 @@ document.querySelector('#checkout-form').addEventListener('submit',async event=>
       subtotal,discount,offerTitle:activeOffer?.title||'',delivery,deliveryWeightKg:deliveryInfo.allWeight,chargeableDeliveryWeightKg:deliveryInfo.chargeableWeight,total:Math.max(0,subtotal-discount)+delivery,
       history:[{status:'processing',at:now}]
     };
+    const savedResponse=await fetch('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({order})});
+    const savedData=await savedResponse.json().catch(()=>({}));
+    if(!savedResponse.ok)throw new Error(savedData.error||'Your order could not be saved. Please try again.');
+    Object.assign(order,savedData.order);
+    if(activeOffer){
+      const response=await fetch('/api/account/offers/redeem',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({offerId:activeOffer.offerId})});
+      const result=await response.json().catch(()=>({}));
+      if(!response.ok)console.warn('The saved offer could not be marked as redeemed:',result.error||response.status);
+    }
     const orders=readOrders();orders.unshift(order);localStorage.setItem(ordersKey,JSON.stringify(orders));localStorage.removeItem(bagKey);
     const modal=document.querySelector('#order-success');
     document.querySelector('#success-message').textContent=`Order ${order.id} is now being processed. Keep your order number to check delivery updates.`;
-    document.querySelector('#success-track-link').href=`order.html?id=${encodeURIComponent(order.id)}`;
+    document.querySelector('#success-track-link').href=`order.html?id=${encodeURIComponent(order.id)}&key=${encodeURIComponent(order.accessKey||'')}`;
     modal.hidden=false;document.querySelector('#success-track-link').focus();
   }catch(error){window.alert(error.message);submit.disabled=false;}
 });

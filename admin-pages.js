@@ -4,13 +4,14 @@
     overview: ['Shop overview', 'Your shop at a glance.'],
     inventory: ['Product inventory', 'Find, edit and manage the products in your catalog.'],
     orders: ['Order management', 'Review orders and keep customers updated on delivery.'],
+    support: ['Support chat', 'Reply to customer conversations and keep support moving.'],
     reviews: ['Customer reviews', 'Manage feedback left on your products.'],
     'product-editor': ['Add a product', 'Create a product listing in a few guided steps.'],
     subscribers: ['Newsletter subscribers', 'View customers who signed up for PennyBuys updates.'],
     commercials: ['Commercials', 'Set up customer offers and delivery promotions.']
   };
   const sectionByPage = {
-    overview: 'overview-section', inventory: 'inventory-section', orders: 'order-section',
+    overview: 'overview-section', inventory: 'inventory-section', orders: 'order-section', support: 'support-section',
     reviews: 'review-section', 'product-editor': 'product-editor', subscribers: 'newsletter-subscribers',
     commercials: 'commercials-section'
   };
@@ -26,6 +27,7 @@
   });
   const hrefByPage = {
     overview: 'admin-overview.html', inventory: 'admin-inventory.html', orders: 'admin-order-management.html',
+    support: 'admin-support.html',
     reviews: 'admin-reviews.html', 'product-editor': 'admin-product-editor.html', subscribers: 'admin-subscribers.html',
     commercials: 'admin-commercials.html'
   };

@@ -44,12 +44,20 @@ For Railway's optional deployment health check, use `/health`. In service Networ
 - Product cards open a detail page with descriptions, highlights, care, delivery and returns information.
 - Favourites are visual only and are not saved.
 - The shopping bag is saved in the current browser using local storage.
-- Sign-in and sign-up pages provide local prototype accounts; the email-link option creates a demo link in the same browser and does not send email.
-- Newsletter signup shows a local confirmation only. It does not collect or send email addresses.
-- Demo checkout creates an order record in the current browser, then shows a confirmation with a direct order status link.
+- Customer accounts are stored in MongoDB; passwords are stored as salted hashes, and sign-in uses a protected session cookie.
+- Newsletter subscriptions are saved in MongoDB and can be viewed in the admin Subscribers section.
+- Checkout saves each order to MongoDB and shows a confirmation with a private order status link. Payment is still a demo and no payment card details are collected.
 - Customers can look up an order using its number and checkout email. Staff can use the Orders section in `admin-products.html` to change status and add the tracking number shown to the customer once the order is on the way. `admin-orders.html` redirects to that section.
 - Order statuses are: Order is being processed, Packed and ready for delivery, On the way for delivery, and Delivered.
-- Checkout and order management are front-end demos. Orders and status updates are stored in the current browser only; payment is not connected.
+- Payment is not connected; order records and delivery status changes are stored in MongoDB so they can be managed across devices.
 - Existing demo product photography is loaded from Unsplash. New admin uploads are stored in Cloudinary and appear in the storefront catalog.
 
-Orders and customer accounts still use the browser prototype storage, and payment is not connected. The product admin is protected by a shared server-side token; replace it with full user and role management before opening the admin to multiple staff members. Keep payment credentials and Cloudinary secrets on the server, not in browser code.
+Basket contents remain in browser storage, while customer accounts and order records are stored in MongoDB. Payment is not connected. The product admin is protected by a shared server-side token; replace it with full user and role management before opening the admin to multiple staff members. Keep payment credentials and Cloudinary secrets on the server, not in browser code.
+
+## Live support chat and browser notifications
+
+- Customers can message the PennyBuys team from `contact.html`; conversations and replies are saved in MongoDB and appear in the admin Support chat inbox.
+- New orders are saved in MongoDB. Admins can update their delivery status and tracking number; the customer order page refreshes status from the server.
+- Customers can opt in to browser alerts at checkout or on the contact page. Staff can enable new chat and order alerts from the Support chat page. Admins can also send an important update from Commercials. New arrivals and order status changes trigger push notifications for matching subscriptions.
+- Browser push requires HTTPS and VAPID keys. Generate a key pair with `npx web-push generate-vapid-keys`, then set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` in Railway Variables (or local `.env`). Keep the private key secret and do not commit it. The browser permission prompt is shown only after a customer or staff member chooses to enable alerts.
+- Push alerts are optional; customers can still browse, chat and track their order when browser push is unavailable. The payment method is still a demo and is not connected to a payment processor.

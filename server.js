@@ -10,6 +10,7 @@ const express = require('express');
 const multer = require('multer');
 const { MongoClient, ObjectId } = require('mongodb');
 const { v2: cloudinary } = require('cloudinary');
+const webpush = require('web-push');
 
 const root = __dirname;
 const app = express();
@@ -21,10 +22,15 @@ const adminToken = process.env.ADMIN_TOKEN || '';
 const customerSessionSecret = process.env.CUSTOMER_SESSION_SECRET || adminToken || crypto.randomBytes(32).toString('hex');
 const scrypt = promisify(crypto.scrypt);
 const maxUploadBytes = 100 * 1024 * 1024;
+const vapidPublicKey = process.env.VAPID_PUBLIC_KEY || '';
+const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || '';
+const pushConfigured = Boolean(vapidPublicKey && vapidPrivateKey);
+if (pushConfigured) webpush.setVapidDetails(process.env.VAPID_SUBJECT || 'mailto:hello@pennybuys.co.uk', vapidPublicKey, vapidPrivateKey);
 const mongoUriIsPlaceholder = /cluster\.example\.mongodb\.net|username:password@/i.test(configuredMongoUri);
 const client = mongoUri ? new MongoClient(mongoUri, { serverSelectionTimeoutMS: 7000 }) : null;
 let databasePromise;
 let demoProducts;
+const storeIndexPromises = new Map();
 
 if (!process.env.CLOUDINARY_URL && process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET) {
   cloudinary.config({
@@ -58,6 +64,32 @@ async function getProductsCollection() {
     });
   }
   return databasePromise;
+}
+
+async function getStoreCollection(name) {
+  await getProductsCollection();
+  if (!client) return null;
+  const collection = client.db(mongoDbName).collection(name);
+  const indexes = { orders: [[{ id: 1 }, { unique: true }]], supportConversations: [[{ id: 1 }, { unique: true }]], supportMessages: [[{ conversationId: 1, createdAt: 1 }, {}]], pushSubscriptions: [[{ endpoint: 1 }, { unique: true }]] }[name] || [];
+  if (!storeIndexPromises.has(name)) storeIndexPromises.set(name, Promise.all(indexes.map(([keys, options]) => collection.createIndex(keys, options))).catch(error => { storeIndexPromises.delete(name); throw error; }));
+  await storeIndexPromises.get(name);
+  return collection;
+}
+
+async function dispatchPush(filter, notification) {
+  if (!pushConfigured || !client) return;
+  try {
+    const subscriptions = await getStoreCollection('pushSubscriptions');
+    if (!subscriptions) return;
+    const targets = await subscriptions.find(filter).project({ _id: 0, endpoint: 1, subscription: 1 }).toArray();
+    await Promise.allSettled(targets.map(async target => {
+      try { await webpush.sendNotification(target.subscription, JSON.stringify(notification)); }
+      catch (error) {
+        if (error.statusCode === 404 || error.statusCode === 410) await subscriptions.deleteOne({ endpoint: target.endpoint });
+        else console.warn('Push delivery failed:', error.message);
+      }
+    }));
+  } catch (error) { console.warn('Push notification could not be sent:', error.message); }
 }
 
 async function getDeletedDemoProductIds() {
@@ -237,6 +269,191 @@ app.post('/api/auth/signout', (req, res) => {
   res.json({ ok: true });
 });
 app.use((req, _res, next) => { req.customer = readCustomer(req); next(); });
+
+app.get('/api/notifications/config', (_req, res) => res.set('Cache-Control', 'no-store').json({ enabled: pushConfigured, publicKey: pushConfigured ? vapidPublicKey : '' }));
+function validPushEndpoint(endpoint) {
+  try {
+    const url = new URL(endpoint);
+    const host = url.hostname.toLowerCase();
+    const supportedProvider = ['fcm.googleapis.com', 'updates.push.services.mozilla.com', 'push.services.mozilla.com', 'web.push.apple.com'].includes(host) || host.endsWith('.notify.windows.com');
+    return url.protocol === 'https:' && !url.username && !url.password && (!url.port || url.port === '443') && supportedProvider;
+  } catch { return false; }
+}
+
+app.post('/api/notifications/subscribe', async (req, res) => {
+  const subscription = req.body?.subscription;
+  const endpoint = String(subscription?.endpoint || '');
+  const email = String(req.customer?.email || req.body?.email || '').trim().toLowerCase();
+  const conversationId = String(req.body?.conversationId || '').slice(0, 80);
+  if (!pushConfigured) return res.status(503).json({ error: 'Browser notifications are not configured yet.' });
+  if (!validPushEndpoint(endpoint) || !subscription?.keys?.p256dh || !subscription?.keys?.auth) return res.status(400).json({ error: 'The browser notification subscription is invalid.' });
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Enter a valid email address for order notifications.' });
+  try {
+    const collection = await getStoreCollection('pushSubscriptions');
+    if (!collection) return res.status(503).json({ error: 'Notifications need a MongoDB connection.' });
+    await collection.updateOne({ endpoint }, { $set: { endpoint, subscription, email, conversationId, audience: 'customer', updatedAt: new Date() }, $setOnInsert: { createdAt: new Date() } }, { upsert: true });
+    res.status(201).json({ ok: true });
+  } catch (error) { console.error('Push subscription save failed:', error.message); res.status(503).json({ error: 'Your notification settings could not be saved.' }); }
+});
+
+app.post('/api/admin/notifications/subscribe', requireAdmin, async (req, res) => {
+  const subscription = req.body?.subscription;
+  const endpoint = String(subscription?.endpoint || '');
+  if (!pushConfigured) return res.status(503).json({ error: 'Browser notifications are not configured yet.' });
+  if (!validPushEndpoint(endpoint) || !subscription?.keys?.p256dh || !subscription?.keys?.auth) return res.status(400).json({ error: 'The browser notification subscription is invalid.' });
+  try {
+    const collection = await getStoreCollection('pushSubscriptions');
+    if (!collection) return res.status(503).json({ error: 'Notifications need a MongoDB connection.' });
+    await collection.updateOne({ endpoint }, { $set: { endpoint, subscription, email: '', audience: 'admin', updatedAt: new Date() }, $setOnInsert: { createdAt: new Date() } }, { upsert: true });
+    res.status(201).json({ ok: true });
+  } catch (error) { console.error('Admin push subscription save failed:', error.message); res.status(503).json({ error: 'Admin notifications could not be enabled.' }); }
+});
+
+app.post('/api/notifications/unsubscribe', async (req, res) => {
+  const endpoint = String(req.body?.endpoint || '');
+  if (!endpoint) return res.status(400).json({ error: 'Choose a browser subscription to remove.' });
+  try { const collection = await getStoreCollection('pushSubscriptions'); if (collection) await collection.deleteOne({ endpoint }); res.json({ ok: true }); }
+  catch (error) { console.error('Push unsubscribe failed:', error.message); res.status(503).json({ error: 'Your notification subscription could not be removed.' }); }
+});
+
+app.post('/api/admin/notifications/broadcast', requireAdmin, async (req, res) => {
+  const title = String(req.body?.title || '').trim().slice(0, 80);
+  const body = String(req.body?.body || '').trim().slice(0, 220);
+  if (!title || !body) return res.status(400).json({ error: 'Add a notification title and message.' });
+  if (!pushConfigured) return res.status(503).json({ error: 'Configure VAPID keys before sending browser notifications.' });
+  void dispatchPush({ audience: 'customer' }, { title, body, url: String(req.body?.url || '/').slice(0, 240), tag: `pennybuys-news-${Date.now()}` });
+  res.json({ ok: true });
+});
+
+app.get('/api/admin/orders', requireAdmin, async (_req, res) => {
+  try { const collection = await getStoreCollection('orders'); if (!collection) return res.status(503).json({ error: 'MongoDB is not configured.' }); const orders = await collection.find({}, { projection: { _id: 0, accessKeyHash: 0 } }).sort({ createdAt: -1 }).limit(500).toArray(); res.json({ orders }); }
+  catch (error) { console.error('Admin orders could not load:', error.message); res.status(503).json({ error: 'Orders could not be loaded from MongoDB.' }); }
+});
+
+app.post('/api/admin/orders/import-browser-history', requireAdmin, async (req, res) => {
+  const source = Array.isArray(req.body?.orders) ? req.body.orders.slice(0, 500) : [];
+  const records = source.filter(order => /^PB-[A-Z0-9-]{8,60}$/i.test(String(order?.id || ''))).map(order => ({
+    id: String(order.id), createdAt: new Date(order.createdAt || Date.now()), status: ['processing', 'packed', 'in_transit', 'delivered'].includes(order.status) ? order.status : 'processing', trackingNumber: String(order.trackingNumber || '').slice(0, 80),
+    customer: { name: String(order.customer?.name || 'Customer').slice(0, 100), email: String(order.customer?.email || '').trim().toLowerCase().slice(0, 160), phone: String(order.customer?.phone || '').slice(0, 40) },
+    address: Object.fromEntries(Object.entries(order.address || {}).map(([key, value]) => [key, String(value || '').slice(0, 180)])), paymentMethod: String(order.paymentMethod || 'Legacy browser order').slice(0, 50),
+    items: Array.isArray(order.items) ? order.items.slice(0, 100).map(item => ({ id: String(item.id || '').slice(0, 100), name: String(item.name || '').slice(0, 160), image: String(item.image || '').slice(0, 1200), price: Math.max(0, Number(item.price) || 0), qty: Math.min(99, Math.max(1, Math.floor(Number(item.qty) || 1))), weightKg: Math.max(0.01, Number(item.weightKg) || 0.5), freeDelivery: item.freeDelivery === true })) : [],
+    subtotal: Number(order.subtotal) || 0, discount: Number(order.discount) || 0, offerTitle: String(order.offerTitle || '').slice(0, 100), delivery: Number(order.delivery) || 0, total: Number(order.total) || 0,
+    history: Array.isArray(order.history) ? order.history.slice(-20).map(item => ({ status: String(item.status || 'processing').slice(0, 30), at: new Date(item.at || Date.now()) })) : [{ status: 'processing', at: new Date(order.createdAt || Date.now()) }], migratedFromBrowser: true
+  }));
+  try {
+    const collection = await getStoreCollection('orders'); if (!collection) return res.status(503).json({ error: 'MongoDB is not configured.' });
+    for (const order of records) await collection.updateOne({ id: order.id }, { $setOnInsert: order }, { upsert: true });
+    res.json({ ok: true, imported: records.length });
+  } catch (error) { console.error('Browser order migration failed:', error.message); res.status(503).json({ error: 'Existing browser orders could not be migrated.' }); }
+});
+
+app.post('/api/orders', async (req, res) => {
+  const input = req.body?.order || {};
+  const customer = input.customer || {};
+  const email = String(customer.email || req.customer?.email || '').trim().toLowerCase();
+  const name = String(customer.name || req.customer?.name || '').trim();
+  const items = Array.isArray(input.items) ? input.items.slice(0, 100).map(item => ({ id: String(item.id || '').slice(0, 100), name: String(item.name || '').slice(0, 160), image: String(item.image || '').slice(0, 1200), price: Math.max(0, Number(item.price) || 0), qty: Math.min(99, Math.max(1, Math.floor(Number(item.qty) || 1))), weightKg: Math.min(10000, Math.max(0.01, Number(item.weightKg) || 0.5)), freeDelivery: item.freeDelivery === true })) : [];
+  if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !items.length) return res.status(400).json({ error: 'Add valid customer details and at least one order item.' });
+  const id = `PB-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+  const accessKey = crypto.randomBytes(32).toString('base64url');
+  const now = new Date();
+  const order = { id, createdAt: now, status: 'processing', trackingNumber: '', customer: { name, email, phone: String(customer.phone || '').slice(0, 40) }, address: Object.fromEntries(Object.entries(input.address || {}).map(([key, value]) => [key, String(value || '').slice(0, 180)])), paymentMethod: String(input.paymentMethod || 'Card (demo)').slice(0, 50), items, subtotal: Number(input.subtotal) || 0, discount: Number(input.discount) || 0, offerTitle: String(input.offerTitle || '').slice(0, 100), delivery: Number(input.delivery) || 0, deliveryWeightKg: Number(input.deliveryWeightKg) || 0, chargeableDeliveryWeightKg: Number(input.chargeableDeliveryWeightKg) || 0, total: Number(input.total) || 0, history: [{ status: 'processing', at: now }], accessKeyHash: crypto.createHash('sha256').update(accessKey).digest('hex') };
+  try {
+    const collection = await getStoreCollection('orders');
+    if (!collection) return res.status(503).json({ error: 'Order placement needs MongoDB. Your order has not been placed; please try again.' });
+    await collection.insertOne(order);
+    void dispatchPush({ audience: 'admin' }, { title: 'New PennyBuys order', body: `${name} placed order ${id}.`, url: '/admin-order-management.html', tag: `order-${id}` });
+    void dispatchPush({ email }, { title: 'Order received', body: `Order ${id} is being processed.`, url: `/order.html?id=${encodeURIComponent(id)}&key=${encodeURIComponent(accessKey)}`, tag: `order-${id}` });
+    const { _id, accessKeyHash, ...publicOrder } = order;
+    res.status(201).json({ order: { ...publicOrder, accessKey } });
+  } catch (error) { console.error('Order could not be saved:', error.message); res.status(503).json({ error: 'We could not save your order. Please try again.' }); }
+});
+
+app.post('/api/orders/lookup', async (req, res) => {
+  const id = String(req.body?.id || '').trim(); const email = String(req.body?.email || '').trim().toLowerCase();
+  if (!id || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Enter your order number and checkout email.' });
+  try { const collection = await getStoreCollection('orders'); const order = await collection?.findOne({ id, 'customer.email': email }, { projection: { _id: 0, accessKeyHash: 0 } }); if (!order) return res.status(404).json({ error: 'We could not find an order with those details.' }); res.json({ order }); }
+  catch (error) { console.error('Order lookup failed:', error.message); res.status(503).json({ error: 'Order tracking is temporarily unavailable.' }); }
+});
+
+app.get('/api/orders/:id', async (req, res) => {
+  const key = String(req.query.key || '');
+  if (key.length < 32) return res.status(401).json({ error: 'Use the private order link or enter your order number and email.' });
+  try { const collection = await getStoreCollection('orders'); const accessKeyHash = crypto.createHash('sha256').update(key).digest('hex'); const order = await collection?.findOne({ id: req.params.id, accessKeyHash }, { projection: { _id: 0, accessKeyHash: 0 } }); if (!order) return res.status(404).json({ error: 'This private order link is not valid.' }); res.set('Cache-Control', 'no-store').json({ order }); }
+  catch (error) { console.error('Private order tracking failed:', error.message); res.status(503).json({ error: 'Order tracking is temporarily unavailable.' }); }
+});
+
+app.patch('/api/admin/orders/:id', requireAdmin, async (req, res) => {
+  const labels = { processing: 'Order is being processed', packed: 'Packed and ready for delivery', in_transit: 'On the way for delivery', delivered: 'Delivered' };
+  const status = String(req.body?.status || ''); const trackingNumber = String(req.body?.trackingNumber || '').trim().slice(0, 80);
+  if (!labels[status]) return res.status(400).json({ error: 'Choose a valid order status.' });
+  if (status === 'in_transit' && !trackingNumber) return res.status(400).json({ error: 'Add the tracking number before marking the order on its way.' });
+  try {
+    const collection = await getStoreCollection('orders'); if (!collection) return res.status(503).json({ error: 'MongoDB is not configured.' });
+    const order = await collection.findOne({ id: req.params.id }); if (!order) return res.status(404).json({ error: 'Order not found.' });
+    const now = new Date(); const history = Array.isArray(order.history) ? order.history : [];
+    if (history.at(-1)?.status !== status) history.push({ status, at: now });
+    await collection.updateOne({ id: order.id }, { $set: { status, trackingNumber, history, updatedAt: now } });
+    void dispatchPush({ email: order.customer.email }, { title: 'Your order has an update', body: `${order.id}: ${labels[status]}${trackingNumber && status === 'in_transit' ? ` · Tracking ${trackingNumber}` : ''}`, url: '/order.html', tag: `order-${order.id}` });
+    res.json({ ok: true });
+  } catch (error) { console.error('Order update failed:', error.message); res.status(503).json({ error: 'The order update could not be saved.' }); }
+});
+
+app.delete('/api/admin/orders', requireAdmin, async (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? [...new Set(req.body.ids.map(id => String(id).slice(0, 100)))].slice(0, 500) : [];
+  if (!ids.length) return res.status(400).json({ error: 'Select at least one order to delete.' });
+  try { const collection = await getStoreCollection('orders'); if (!collection) return res.status(503).json({ error: 'MongoDB is not configured.' }); const result = await collection.deleteMany({ id: { $in: ids } }); res.json({ ok: true, deletedCount: result.deletedCount }); }
+  catch (error) { console.error('Order history deletion failed:', error.message); res.status(503).json({ error: 'Selected orders could not be deleted.' }); }
+});
+
+const validConversationId = value => /^[a-f0-9-]{36}$/i.test(String(value || ''));
+app.get('/api/support/conversations/:id/messages', async (req, res) => {
+  if (!validConversationId(req.params.id)) return res.status(400).json({ error: 'This chat link is invalid.' });
+  try { const messages = await getStoreCollection('supportMessages'); if (!messages) return res.status(503).json({ error: 'Chat needs a MongoDB connection.' }); const rows = await messages.find({ conversationId: req.params.id }, { projection: { _id: 0, conversationId: 0 } }).sort({ createdAt: 1 }).limit(200).toArray(); res.set('Cache-Control', 'no-store').json({ messages: rows }); }
+  catch (error) { console.error('Support messages could not load:', error.message); res.status(503).json({ error: 'Chat is temporarily unavailable.' }); }
+});
+
+app.post('/api/support/conversations/:id/messages', async (req, res) => {
+  const conversationId = req.params.id; const message = String(req.body?.message || '').trim().slice(0, 2000);
+  const email = String(req.customer?.email || req.body?.email || '').trim().toLowerCase(); const name = String(req.customer?.name || req.body?.name || 'Shopper').trim().slice(0, 100);
+  if (!validConversationId(conversationId)) return res.status(400).json({ error: 'This chat link is invalid.' });
+  if (!message) return res.status(400).json({ error: 'Write a message before sending.' });
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Enter a valid email address.' });
+  try {
+    const conversations = await getStoreCollection('supportConversations'); const messages = await getStoreCollection('supportMessages');
+    if (!conversations || !messages) return res.status(503).json({ error: 'Chat needs a MongoDB connection.' });
+    const now = new Date();
+    await conversations.updateOne({ id: conversationId }, { $set: { id: conversationId, name, email, status: 'open', lastMessage: message, lastMessageAt: now, updatedAt: now }, $inc: { unreadAdmin: 1 }, $setOnInsert: { createdAt: now } }, { upsert: true });
+    const result = await messages.insertOne({ conversationId, sender: 'customer', name, email, message, createdAt: now });
+    void dispatchPush({ audience: 'admin' }, { title: `New message from ${name}`, body: message.slice(0, 130), url: '/admin-support.html', tag: `chat-${conversationId}` });
+    res.status(201).json({ message: { id: result.insertedId.toString(), sender: 'customer', name, message, createdAt: now } });
+  } catch (error) { console.error('Support message save failed:', error.message); res.status(503).json({ error: 'Your message could not be sent. Please try again.' }); }
+});
+
+app.get('/api/admin/support/conversations', requireAdmin, async (_req, res) => {
+  try { const collection = await getStoreCollection('supportConversations'); if (!collection) return res.status(503).json({ error: 'MongoDB is not configured.' }); const conversations = await collection.find({}, { projection: { _id: 0 } }).sort({ lastMessageAt: -1 }).limit(300).toArray(); res.json({ conversations }); }
+  catch (error) { console.error('Support inbox could not load:', error.message); res.status(503).json({ error: 'Support inbox is temporarily unavailable.' }); }
+});
+
+app.get('/api/admin/support/conversations/:id/messages', requireAdmin, async (req, res) => {
+  if (!validConversationId(req.params.id)) return res.status(400).json({ error: 'This chat link is invalid.' });
+  try { const messages = await getStoreCollection('supportMessages'); if (!messages) return res.status(503).json({ error: 'MongoDB is not configured.' }); const rows = await messages.find({ conversationId: req.params.id }, { projection: { _id: 0, conversationId: 0 } }).sort({ createdAt: 1 }).limit(200).toArray(); const conversations = await getStoreCollection('supportConversations'); await conversations?.updateOne({ id: req.params.id }, { $set: { unreadAdmin: 0 } }); res.json({ messages: rows }); }
+  catch (error) { console.error('Admin chat could not load:', error.message); res.status(503).json({ error: 'This conversation could not be loaded.' }); }
+});
+
+app.post('/api/admin/support/conversations/:id/messages', requireAdmin, async (req, res) => {
+  const conversationId = req.params.id; const message = String(req.body?.message || '').trim().slice(0, 2000);
+  if (!validConversationId(conversationId)) return res.status(400).json({ error: 'This chat link is invalid.' });
+  if (!message) return res.status(400).json({ error: 'Write a reply before sending.' });
+  try {
+    const conversations = await getStoreCollection('supportConversations'); const messages = await getStoreCollection('supportMessages'); const conversation = await conversations?.findOne({ id: conversationId });
+    if (!conversation || !messages) return res.status(404).json({ error: 'This conversation no longer exists.' });
+    const now = new Date(); const result = await messages.insertOne({ conversationId, sender: 'admin', name: 'PennyBuys Support', message, createdAt: now });
+    await conversations.updateOne({ id: conversationId }, { $set: { lastMessage: message, lastMessageAt: now, updatedAt: now }, $inc: { unreadCustomer: 1 } });
+    void dispatchPush({ $or: [{ email: conversation.email || null }, { conversationId }] }, { title: 'PennyBuys replied', body: message.slice(0, 130), url: '/contact.html', tag: `chat-${conversationId}` });
+    res.status(201).json({ message: { id: result.insertedId.toString(), sender: 'admin', name: 'PennyBuys Support', message, createdAt: now } });
+  } catch (error) { console.error('Support reply failed:', error.message); res.status(503).json({ error: 'Your reply could not be sent.' }); }
+});
 
 async function getCommercialsCollection() {
   await getProductsCollection();
@@ -533,6 +750,7 @@ app.post('/api/products', requireAdmin, upload.fields([{ name: 'images', maxCoun
       updatedAt: now
     };
     await collection.insertOne(product);
+    void dispatchPush({ audience: 'customer' }, { title: 'New at PennyBuys', body: `${product.name} has just arrived.`, url: `/product.html?id=${encodeURIComponent(product.id)}`, tag: `new-product-${product.id}` });
     res.status(201).json({ product: { ...product, createdAt: now.toISOString(), updatedAt: now.toISOString() }, products: await getStoreProducts() });
   } catch (error) {
     console.error('Product creation failed:', error.message);

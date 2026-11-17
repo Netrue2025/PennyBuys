@@ -6,7 +6,7 @@ function readOrders(){try{return JSON.parse(localStorage.getItem(ordersKey)||'[]
 function formatDate(value){const date=new Date(value);return Number.isNaN(date.valueOf())?'':new Intl.DateTimeFormat('en-GB',{dateStyle:'medium',timeStyle:'short'}).format(date)}
 const query=new URLSearchParams(location.search);
 const lookup=document.querySelector('#order-lookup');
-let visibleOrder=null;
+let visibleOrder=null;let activeLookup=null;let refreshTimer;
 function showOrder(order){
   if(!order)return;
   visibleOrder=order;
@@ -25,7 +25,18 @@ function showOrder(order){
   document.querySelector('#order-lines').innerHTML=(order.items||[]).map(item=>`<div class="order-summary-line"><span>${escapeHTML(item.name)} × ${Number(item.qty)}</span><b>${money(item.price*item.qty)}</b></div>`).join('')+`<div class="order-summary-line"><span>Delivery</span><b>${Number(order.delivery)?money(order.delivery):'Free'}</b></div>`;
   document.querySelector('.order-total').textContent=`Total ${money(order.total)}`;
 }
-lookup.addEventListener('submit',event=>{event.preventDefault();const values=new FormData(lookup);const order=readOrders().find(item=>item.id.toLowerCase()===String(values.get('orderId')).trim().toLowerCase()&&item.customer?.email.toLowerCase()===String(values.get('email')).trim().toLowerCase());if(order){showOrder(order);history.replaceState(null,'',`order.html?id=${encodeURIComponent(order.id)}`)}else{document.querySelector('#order-result').hidden=true;document.querySelector('#order-error').hidden=false}});
+async function lookupOrder(id,email){
+  try{const response=await fetch('/api/orders/lookup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,email})});const data=await response.json();if(!response.ok)throw new Error(data.error||'Order lookup failed.');return data.order}
+  catch(error){const cached=readOrders().find(item=>item.id.toLowerCase()===id.toLowerCase()&&item.customer?.email.toLowerCase()===email.toLowerCase());if(cached)return cached;throw error}
+}
+async function refreshPrivateOrder(id,key){
+  const response=await fetch(`/api/orders/${encodeURIComponent(id)}?key=${encodeURIComponent(key)}`,{cache:'no-store'});const data=await response.json();if(!response.ok)throw new Error(data.error||'Could not refresh this order.');return data.order;
+}
+function startRefresh(){clearInterval(refreshTimer);refreshTimer=setInterval(async()=>{if(!visibleOrder||document.hidden)return;try{const latest=activeLookup?.key?await refreshPrivateOrder(activeLookup.id,activeLookup.key):activeLookup?await lookupOrder(activeLookup.id,activeLookup.email):null;if(latest){const changed=latest.status!==visibleOrder.status||latest.trackingNumber!==visibleOrder.trackingNumber;visibleOrder=latest;if(changed)showOrder(latest)}}catch{}},20000)}
+lookup.addEventListener('submit',async event=>{event.preventDefault();const values=new FormData(lookup);const id=String(values.get('orderId')).trim();const email=String(values.get('email')).trim().toLowerCase();try{const order=await lookupOrder(id,email);activeLookup={id:order.id,email};showOrder(order);history.replaceState(null,'',`order.html?id=${encodeURIComponent(order.id)}`);startRefresh()}catch{document.querySelector('#order-result').hidden=true;document.querySelector('#order-error').hidden=false}});
 const linkedOrderId=query.get('id');
-if(linkedOrderId){const order=readOrders().find(item=>item.id===linkedOrderId);if(order){lookup.hidden=true;showOrder(order);}}
+const accessKey=query.get('key');
+if(linkedOrderId&&accessKey){lookup.hidden=true;activeLookup={id:linkedOrderId,key:accessKey};refreshPrivateOrder(linkedOrderId,accessKey).then(order=>{showOrder(order);startRefresh()}).catch(()=>{lookup.hidden=false;document.querySelector('#order-result').hidden=true;document.querySelector('#order-error').hidden=false})}
+else if(linkedOrderId){const order=readOrders().find(item=>item.id===linkedOrderId);if(order){lookup.hidden=true;showOrder(order)}}
+if(linkedOrderId&&!accessKey){lookup.elements.orderId.value=linkedOrderId;const cached=readOrders().find(item=>item.id===linkedOrderId);if(cached?.accessKey){lookup.hidden=true;activeLookup={id:linkedOrderId,key:cached.accessKey};refreshPrivateOrder(linkedOrderId,cached.accessKey).then(order=>{showOrder(order);startRefresh()}).catch(()=>showOrder(cached))}}
 window.addEventListener('pennybuys:currencychange',()=>{if(visibleOrder)showOrder(visibleOrder)});

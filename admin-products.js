@@ -178,6 +178,14 @@ document.querySelector('#commercials-form').addEventListener('submit',async even
   catch(error){message.textContent=error.message;}
   finally{submit.disabled=false;}
 });
+document.querySelector('#send-important-notification')?.addEventListener('click',async event=>{
+  const button=event.currentTarget;const status=document.querySelector('#important-notification-status');const title=document.querySelector('#important-notification-form [name="title"]');const body=document.querySelector('#important-notification-form [name="body"]');
+  if(!title.reportValidity()||!body.reportValidity())return;
+  button.disabled=true;status.textContent='Sending notification…';
+  try{const result=await api('/api/admin/notifications/broadcast',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:title.value.trim(),body:body.value.trim(),url:'/'})});status.textContent=result.ok?'Notification sent to customers with alerts enabled.':'Notification sent.';title.value='';body.value=''}
+  catch(error){status.textContent=error.message}
+  finally{button.disabled=false}
+});
 document.querySelector('#refresh-subscribers').addEventListener('click',loadSubscribers);
 document.querySelector('#refresh-reviews').addEventListener('click',loadReviews);
 adminReviewList.addEventListener('click',async event=>{
