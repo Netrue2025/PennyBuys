@@ -146,9 +146,9 @@
       const promotion = config.freeDelivery;
       const announcements = Array.isArray(config.announcements) ? config.announcements.map(item => String(item || '').trim()).filter(Boolean) : [];
       if (promotion?.enabled) announcements.unshift(promotion.title || `Pick ${Math.max(1, Number(promotion.itemCount) || 3)} items for free delivery`);
-      const isLandingPage = location.pathname === '/' || location.pathname.endsWith('/index.html');
+      const isLandingPage = location.pathname === '/' || location.pathname.endsWith('/index.html') || location.pathname.endsWith('/app.html');
       if (announcements.length && isLandingPage) {
-        const anchor = document.querySelector('.hero, .catalog-intro, .catalog-main') || document.querySelector('.commerce-header');
+        const anchor = document.querySelector('.hero, .catalog-intro, .catalog-main, .app-header') || document.querySelector('.commerce-header');
         if (anchor && !document.querySelector('.commercial-promo-strip')) {
           const strip = document.createElement('aside');
           strip.className = 'commercial-promo-strip';
@@ -165,7 +165,7 @@
             track.append(item);
           });
           const placement = anchor.classList.contains('commerce-header') && anchor.nextElementSibling?.classList.contains('currency-toolbar') ? anchor.nextElementSibling : anchor;
-          if (anchor.classList.contains('commerce-header')) placement.insertAdjacentElement('afterend', strip);
+          if (anchor.classList.contains('commerce-header') || anchor.classList.contains('app-header')) placement.insertAdjacentElement('afterend', strip);
           else anchor.insertAdjacentElement('beforebegin', strip);
           const tickerWindow = strip.querySelector('.commercial-promo-window');
           const sizeTicker = () => {
