@@ -73,7 +73,7 @@
     installBar.setAttribute('aria-label', 'Get the PennyBuys shopping app');
     const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
     const installHint = ios ? 'Open the app, then tap Share, then Add to Home Screen.' : 'Tap Open app, then use your browser menu to install it.';
-    installBar.innerHTML = `<img src="/Media/pennybuys-app-icon.svg" alt="" class="pwa-install-icon"><div class="pwa-install-copy"><b>Good things, one tap away</b><span>${installHint}</span></div><button class="pwa-install-action" type="button" hidden>Install</button><a class="pwa-install-action pwa-open-app" href="/app.html">Open app</a><button class="pwa-install-close" type="button" aria-label="Dismiss app download notice">&times;</button>`;
+    installBar.innerHTML = `<img src="/Media/pennybuys-icon.png" alt="" class="pwa-install-icon"><div class="pwa-install-copy"><b>Good things, one tap away</b><span>${installHint}</span></div><button class="pwa-install-action" type="button" hidden>Install</button><a class="pwa-install-action pwa-open-app" href="/app.html">Open app</a><button class="pwa-install-close" type="button" aria-label="Dismiss app download notice">&times;</button>`;
     document.body.append(installBar);
     installButton = installBar.querySelector('.pwa-install-action[hidden]');
     installLink = installBar.querySelector('.pwa-open-app');

@@ -28,3 +28,14 @@
 .commercial-promo-track span::after{color:#bd4144}
 .commercial-promo-spark{color:#b83a42}
 @media(max-width:620px){.commercial-promo-strip{min-height:45px;border-radius:16px;background:rgba(255,255,255,.55)}.commercial-promo-strip::before{left:16px;right:16px}.commercial-promo-track span{font-size:11px}}
+
+/* Clean, transparent ticker that follows the storefront's white surfaces. */
+.commercial-promo-strip{width:min(1264px,calc(100% - 48px));min-height:42px;margin:8px auto 5px;padding:5px 11px;border:0;border-radius:0;background:transparent;color:#17345f;box-shadow:none;backdrop-filter:none}
+.commercial-promo-strip::before{display:none}
+.commercial-promo-mark{width:27px;height:27px;border:0;border-radius:0;background:transparent;color:#f47700}
+.commercial-promo-mark svg{fill:none;stroke:currentColor;stroke-width:1.8}
+.commercial-promo-track span{color:#17345f;font-size:12px;font-weight:700;text-shadow:none}
+.commercial-promo-track span::after{color:#f47700}
+.commercial-promo-spark{color:#f47700}
+@media(max-width:620px){.commercial-promo-strip{width:calc(100% - 24px);min-height:38px;margin:5px auto 4px;padding:4px 6px;border-radius:0;background:transparent}.commercial-promo-mark{width:23px;height:23px}.commercial-promo-track span{font-size:10px}.commercial-promo-track span::after{margin-left:50px}}
+.commercial-promo-track span::after{content:'\2726';margin-left:54px;color:#f47700}

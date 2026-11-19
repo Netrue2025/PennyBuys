@@ -152,10 +152,10 @@
         if (anchor && !document.querySelector('.commercial-promo-strip')) {
           const strip = document.createElement('aside');
           strip.className = 'commercial-promo-strip';
-          const text = announcements.join(' · ');
+          const text = announcements.join(' | ');
           strip.setAttribute('role', 'note');
           strip.setAttribute('aria-label', text);
-          strip.innerHTML = '<span class="commercial-promo-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m12 2-4 5h2l-5 6h4l-4 6h14l-4-6h4l-5-6h2z"/><path d="M11 19v3h2v-3"/></svg></span><div class="commercial-promo-window"><div class="commercial-promo-track"></div></div><span class="commercial-promo-spark" aria-hidden="true">❄</span>';
+          strip.innerHTML = '<span class="commercial-promo-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4"/></svg></span><div class="commercial-promo-window"><div class="commercial-promo-track"></div></div><span class="commercial-promo-spark" aria-hidden="true">&#10022;</span>';
           const track = strip.querySelector('.commercial-promo-track');
           [...announcements, ...announcements].forEach((message, index) => {
             const item = document.createElement('span');

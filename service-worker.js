@@ -1,4 +1,4 @@
-const SHELL_CACHE = 'pennybuys-app-shell-v1';
+const SHELL_CACHE = 'pennybuys-app-shell-v2';
 const SHELL_FILES = [
   '/app.html',
   '/shopping-app.css',
@@ -11,6 +11,7 @@ const SHELL_FILES = [
   '/currency.js',
   '/image-fallback.js',
   '/Media/pennybuys-logo.png',
+  '/Media/pennybuys-icon.png',
   '/Media/pennybuys-app-icon.svg',
   '/Media/product-placeholder.svg'
 ];
@@ -57,8 +58,8 @@ self.addEventListener('push', event => {
   const title = data.title || 'PennyBuys update';
   const options = {
     body: data.body || 'There is an update waiting for you.',
-    icon: '/Media/pennybuys-logo.png',
-    badge: '/Media/pennybuys-logo.png',
+    icon: '/Media/pennybuys-icon.png',
+    badge: '/Media/pennybuys-icon.png',
     tag: data.tag || 'pennybuys-update',
     renotify: true,
     data: { url: data.url || '/' }
