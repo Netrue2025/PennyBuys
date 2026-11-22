@@ -11,10 +11,13 @@ const multer = require('multer');
 const { MongoClient, ObjectId } = require('mongodb');
 const { v2: cloudinary } = require('cloudinary');
 const webpush = require('web-push');
+const Stripe = require('stripe');
 
 const root = __dirname;
 const app = express();
 const port = Number(process.env.PORT || 3000);
+const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
+const stripeTaxBehavior = process.env.STRIPE_TAX_BEHAVIOR === 'exclusive' ? 'exclusive' : 'inclusive';
 const configuredMongoUri = (process.env.MONGODB_URI || '').trim();
 const mongoUri = configuredMongoUri && !/cluster\.example\.mongodb\.net|username:password@/i.test(configuredMongoUri) ? configuredMongoUri : '';
 const mongoDbName = process.env.MONGODB_DB_NAME || 'pennybuys';
@@ -189,6 +192,46 @@ async function destroyProductAssets(ids, resourceType) {
 }
 
 app.disable('x-powered-by');
+// Stripe signs the exact request bytes, so this route must run before express.json().
+app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  if (!stripe || !process.env.STRIPE_WEBHOOK_SECRET) return res.status(503).send('Stripe webhook is not configured.');
+  let event;
+  try { event = stripe.webhooks.constructEvent(req.body, req.headers['stripe-signature'], process.env.STRIPE_WEBHOOK_SECRET); }
+  catch (error) { return res.status(400).send(`Webhook signature verification failed: ${error.message}`); }
+  const session = event.data.object;
+  try {
+    if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
+      if (session.payment_status !== 'paid') return res.json({ received: true });
+      const orders = await getStoreCollection('orders');
+      const orderId = String(session.metadata?.orderId || '');
+      const order = await orders?.findOne({ id: orderId, stripeSessionId: session.id });
+      if (!order) return res.status(404).send('Pending order not found.');
+      if (order.paymentStatus !== 'paid') {
+        const now = new Date();
+        const details = session.customer_details || {};
+        const address = session.shipping_details?.address || details.address || {};
+        const history = [...(order.history || []), { status: 'processing', at: now }];
+        const paidUpdate = await orders.updateOne({ id: orderId, paymentStatus: { $ne: 'paid' } }, { $set: {
+          status: 'processing', paymentStatus: 'paid', paymentMethod: 'Stripe', stripePaymentIntent: session.payment_intent || '',
+          total: Number(session.amount_total || 0) / 100, tax: Number(session.total_details?.amount_tax || 0) / 100,
+          customer: { ...order.customer, email: details.email || session.customer_email || order.customer.email, phone: details.phone || order.customer.phone },
+          address: { line1: address.line1 || '', line2: address.line2 || '', city: address.city || '', postcode: address.postal_code || '', country: address.country || '' },
+          history, paidAt: now, updatedAt: now
+        } });
+        if (paidUpdate.modifiedCount) {
+          const offerId = String(session.metadata?.offerId || '');
+          if (offerId) await client.db(mongoDbName).collection('storeCommercials').updateOne({ type: 'customer-offer', email: order.customer.email, offerId, status: 'accepted' }, { $set: { status: 'redeemed', redeemedAt: now } });
+          void dispatchPush({ audience: 'admin' }, { title: 'Paid PennyBuys order', body: `${order.customer.name} paid for ${orderId}.`, url: '/admin-order-management.html', tag: `order-${orderId}` });
+          void dispatchPush({ email: order.customer.email }, { title: 'Order received', body: `Order ${orderId} is now being processed.`, url: `/order.html?id=${encodeURIComponent(orderId)}`, tag: `order-${orderId}` });
+        }
+      }
+    } else if (event.type === 'checkout.session.expired') {
+      const orders = await getStoreCollection('orders');
+      await orders?.updateOne({ stripeSessionId: session.id, paymentStatus: 'pending' }, { $set: { paymentStatus: 'expired', updatedAt: new Date() } });
+    }
+    res.json({ received: true });
+  } catch (error) { console.error('Stripe webhook processing failed:', error.message); res.status(500).send('Webhook processing failed.'); }
+});
 app.use(express.json({ limit: '1mb' }));
 
 function readCustomer(req) {
@@ -347,39 +390,84 @@ app.post('/api/admin/orders/import-browser-history', requireAdmin, async (req, r
   } catch (error) { console.error('Browser order migration failed:', error.message); res.status(503).json({ error: 'Existing browser orders could not be migrated.' }); }
 });
 
-app.post('/api/orders', async (req, res) => {
-  const input = req.body?.order || {};
-  const customer = input.customer || {};
+app.post('/api/stripe/checkout-session', async (req, res) => {
+  if (!stripe) return res.status(503).json({ error: 'Configure STRIPE_SECRET_KEY on the server before accepting payments.' });
+  const customer = req.body?.customer || {};
+  const name = String(customer.name || req.customer?.name || '').trim().slice(0, 100);
   const email = String(customer.email || req.customer?.email || '').trim().toLowerCase();
-  const name = String(customer.name || req.customer?.name || '').trim();
-  const items = Array.isArray(input.items) ? input.items.slice(0, 100).map(item => ({ id: String(item.id || '').slice(0, 100), name: String(item.name || '').slice(0, 160), image: String(item.image || '').slice(0, 1200), price: Math.max(0, Number(item.price) || 0), qty: Math.min(99, Math.max(1, Math.floor(Number(item.qty) || 1))), weightKg: Math.min(10000, Math.max(0.01, Number(item.weightKg) || 0.5)), freeDelivery: item.freeDelivery === true })) : [];
-  if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !items.length) return res.status(400).json({ error: 'Add valid customer details and at least one order item.' });
-  const id = `PB-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
-  const accessKey = crypto.randomBytes(32).toString('base64url');
-  const now = new Date();
-  const order = { id, createdAt: now, status: 'processing', trackingNumber: '', customer: { name, email, phone: String(customer.phone || '').slice(0, 40) }, address: Object.fromEntries(Object.entries(input.address || {}).map(([key, value]) => [key, String(value || '').slice(0, 180)])), paymentMethod: String(input.paymentMethod || 'Card (demo)').slice(0, 50), items, subtotal: Number(input.subtotal) || 0, discount: Number(input.discount) || 0, offerTitle: String(input.offerTitle || '').slice(0, 100), delivery: Number(input.delivery) || 0, deliveryWeightKg: Number(input.deliveryWeightKg) || 0, chargeableDeliveryWeightKg: Number(input.chargeableDeliveryWeightKg) || 0, total: Number(input.total) || 0, history: [{ status: 'processing', at: now }], accessKeyHash: crypto.createHash('sha256').update(accessKey).digest('hex') };
+  const phone = String(customer.phone || '').trim().slice(0, 40);
+  const requested = Array.isArray(req.body?.items) ? req.body.items.slice(0, 50) : [];
+  if (name.length < 2 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !requested.length) return res.status(400).json({ error: 'Enter valid contact details and add at least one product.' });
+  const quantities = new Map();
+  for (const line of requested) {
+    const id = String(line?.id || '').slice(0, 100);
+    const qty = Math.floor(Number(line?.qty));
+    if (!id || !Number.isInteger(qty) || qty < 1 || qty > 99) return res.status(400).json({ error: 'One or more basket quantities are invalid.' });
+    quantities.set(id, (quantities.get(id) || 0) + qty);
+  }
+  if ([...quantities.values()].some(qty => qty > 99)) return res.status(400).json({ error: 'A product quantity cannot exceed 99.' });
   try {
-    const collection = await getStoreCollection('orders');
-    if (!collection) return res.status(503).json({ error: 'Order placement needs MongoDB. Your order has not been placed; please try again.' });
-    await collection.insertOne(order);
-    void dispatchPush({ audience: 'admin' }, { title: 'New PennyBuys order', body: `${name} placed order ${id}.`, url: '/admin-order-management.html', tag: `order-${id}` });
-    void dispatchPush({ email }, { title: 'Order received', body: `Order ${id} is being processed.`, url: `/order.html?id=${encodeURIComponent(id)}&key=${encodeURIComponent(accessKey)}`, tag: `order-${id}` });
-    const { _id, accessKeyHash, ...publicOrder } = order;
-    res.status(201).json({ order: { ...publicOrder, accessKey } });
-  } catch (error) { console.error('Order could not be saved:', error.message); res.status(503).json({ error: 'We could not save your order. Please try again.' }); }
+    const catalogue = await getStoreProducts();
+    const byId = new Map(catalogue.map(product => [String(product.id), product]));
+    const items = [...quantities].map(([id, qty]) => {
+      const product = byId.get(id);
+      if (!product || !Number.isFinite(Number(product.price)) || Number(product.price) < 0) throw new Error(`Product ${id} is unavailable.`);
+      return { id, name: String(product.name || 'PennyBuys product').slice(0, 200), image: product.image || '', price: Number(product.price), qty, weightKg: Math.max(0.01, Number(product.weightKg) || 0.5), freeDelivery: product.freeDelivery === true };
+    });
+    const subtotal = items.reduce((sum, item) => sum + item.price * item.qty, 0);
+    const count = items.reduce((sum, item) => sum + item.qty, 0);
+    const allWeight = items.reduce((sum, item) => sum + item.weightKg * item.qty, 0);
+    const chargeableWeight = items.reduce((sum, item) => sum + (item.freeDelivery ? 0 : item.weightKg * item.qty), 0);
+    const commercials = client ? await getCommercialsCollection() : null;
+    const config = await commercials?.findOne({ key: 'active' }, { projection: { _id: 0 } }) || {};
+    const freeDeliveryCount = config.freeDelivery?.enabled ? Math.max(1, Number(config.freeDelivery.itemCount) || 3) : 0;
+    const campaignFree = freeDeliveryCount > 0 && count >= freeDeliveryCount;
+    const weightPricing = config.weightDelivery?.enabled === true;
+    let delivery = campaignFree ? 0 : weightPricing ? chargeableWeight * Math.max(0, Number(config.weightDelivery.ratePerKg) || 0) : (subtotal >= 35 || chargeableWeight === 0 ? 0 : 3.95);
+    const acceptedOffer = req.customer ? await commercials?.findOne({ type: 'customer-offer', email: req.customer.email, status: 'accepted' }, { projection: { _id: 0 } }) : null;
+    const discountPercent = Math.min(90, Math.max(0, Number(acceptedOffer?.percent) || 0));
+    const discount = subtotal * discountPercent / 100;
+    const discountedProducts = items.map(item => {
+      const unit = Math.max(0, Math.round(item.price * (1 - discountPercent / 100) * 100));
+      const imageUrl = /^https:\/\//i.test(item.image) ? item.image : undefined;
+      return { quantity: item.qty, price_data: { currency: 'gbp', unit_amount: unit, tax_behavior: stripeTaxBehavior, product_data: { name: item.name, ...(imageUrl ? { images: [imageUrl] } : {}) } } };
+    });
+    const baseUrl = String(process.env.PUBLIC_BASE_URL || 'https://pennybuys.co.uk').replace(/\/$/, '');
+    const id = `PB-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+    const accessKey = crypto.randomBytes(32).toString('base64url');
+    const now = new Date();
+    const order = { id, createdAt: now, status: 'pending_payment', paymentStatus: 'pending', trackingNumber: '', customer: { name, email, phone }, address: {}, paymentMethod: 'Stripe', items, subtotal, discount, offerTitle: acceptedOffer?.title || '', delivery, deliveryWeightKg: allWeight, chargeableDeliveryWeightKg: chargeableWeight, total: Math.max(0, subtotal - discount) + delivery, history: [], accessKeyHash: crypto.createHash('sha256').update(accessKey).digest('hex') };
+    const orders = await getStoreCollection('orders');
+    if (!orders) return res.status(503).json({ error: 'Order checkout needs a MongoDB connection.' });
+    await orders.insertOne(order);
+    try {
+      const lineItems = [...discountedProducts];
+      const shippingOptions = delivery > 0 ? [{ shipping_rate_data: { type: 'fixed_amount', display_name: 'Delivery', fixed_amount: { amount: Math.round(delivery * 100), currency: 'gbp', tax_behavior: stripeTaxBehavior } } }] : [];
+      const checkoutSession = await stripe.checkout.sessions.create({
+        mode: 'payment', payment_method_types: ['card'], automatic_tax: { enabled: true },
+        billing_address_collection: 'required', shipping_address_collection: { allowed_countries: (process.env.STRIPE_ALLOWED_COUNTRIES || 'GB').split(',').map(value => value.trim().toUpperCase()).filter(Boolean) },
+        phone_number_collection: { enabled: true }, customer_email: email, line_items: lineItems, shipping_options: shippingOptions,
+        client_reference_id: id, metadata: { orderId: id, offerId: acceptedOffer?.offerId || '' },
+        success_url: `${baseUrl}/order.html?id=${encodeURIComponent(id)}&key=${encodeURIComponent(accessKey)}&paid=1`,
+        cancel_url: `${baseUrl}/checkout.html?cancelled=1`
+      });
+      await orders.updateOne({ id }, { $set: { stripeSessionId: checkoutSession.id } });
+      res.json({ url: checkoutSession.url });
+    } catch (error) { await orders.deleteOne({ id, paymentStatus: 'pending' }); throw error; }
+  } catch (error) { console.error('Stripe checkout session failed:', error.message); res.status(503).json({ error: error.message.startsWith('Product ') ? error.message : 'Secure checkout could not be started. Please try again.' }); }
 });
 
 app.post('/api/orders/lookup', async (req, res) => {
   const id = String(req.body?.id || '').trim(); const email = String(req.body?.email || '').trim().toLowerCase();
   if (!id || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Enter your order number and checkout email.' });
-  try { const collection = await getStoreCollection('orders'); const order = await collection?.findOne({ id, 'customer.email': email }, { projection: { _id: 0, accessKeyHash: 0 } }); if (!order) return res.status(404).json({ error: 'We could not find an order with those details.' }); res.json({ order }); }
+  try { const collection = await getStoreCollection('orders'); const order = await collection?.findOne({ id, 'customer.email': email }, { projection: { _id: 0, accessKeyHash: 0, stripeSessionId: 0, stripePaymentIntent: 0, stripeUrl: 0 } }); if (!order) return res.status(404).json({ error: 'We could not find an order with those details.' }); res.json({ order }); }
   catch (error) { console.error('Order lookup failed:', error.message); res.status(503).json({ error: 'Order tracking is temporarily unavailable.' }); }
 });
 
 app.get('/api/orders/:id', async (req, res) => {
   const key = String(req.query.key || '');
   if (key.length < 32) return res.status(401).json({ error: 'Use the private order link or enter your order number and email.' });
-  try { const collection = await getStoreCollection('orders'); const accessKeyHash = crypto.createHash('sha256').update(key).digest('hex'); const order = await collection?.findOne({ id: req.params.id, accessKeyHash }, { projection: { _id: 0, accessKeyHash: 0 } }); if (!order) return res.status(404).json({ error: 'This private order link is not valid.' }); res.set('Cache-Control', 'no-store').json({ order }); }
+  try { const collection = await getStoreCollection('orders'); const accessKeyHash = crypto.createHash('sha256').update(key).digest('hex'); const order = await collection?.findOne({ id: req.params.id, accessKeyHash }, { projection: { _id: 0, accessKeyHash: 0, stripeSessionId: 0, stripePaymentIntent: 0, stripeUrl: 0 } }); if (!order) return res.status(404).json({ error: 'This private order link is not valid.' }); res.set('Cache-Control', 'no-store').json({ order }); }
   catch (error) { console.error('Private order tracking failed:', error.message); res.status(503).json({ error: 'Order tracking is temporarily unavailable.' }); }
 });
 

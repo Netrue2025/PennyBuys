@@ -29,6 +29,7 @@ Configure these environment variables locally in `.env` or in Railway's service 
 - `MONGODB_URI` and optional `MONGODB_DB_NAME` (defaults to `pennybuys`).
 - Either `CLOUDINARY_URL` or `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET`.
 - `PORT` is provided by Railway; local default is `3000`.
+- `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` are server-only. Set `STRIPE_TAX_BEHAVIOR` to `inclusive` (default) or `exclusive`, `STRIPE_ALLOWED_COUNTRIES` to ISO country codes (default `GB`), and `PUBLIC_BASE_URL` to the public HTTPS site URL.
 
 The first MongoDB connection seeds the collection with the current demo products when it is empty. The storefront's `/products-data.js` endpoint then serves current MongoDB products to the home, catalog, product and checkout pages. If MongoDB is unconfigured or temporarily unreachable, the storefront and admin inventory list fall back to the bundled demo data; adding products still requires a working database. Replace `MONGODB_URI` in your local `.env` with the real URI from MongoDB Atlas. Keep `.env` and all API secrets out of source control; `.env.example` contains placeholders only.
 
@@ -46,13 +47,23 @@ For Railway's optional deployment health check, use `/health`. In service Networ
 - The shopping bag is saved in the current browser using local storage.
 - Customer accounts are stored in MongoDB; passwords are stored as salted hashes, and sign-in uses a protected session cookie.
 - Newsletter subscriptions are saved in MongoDB and can be viewed in the admin Subscribers section.
-- Checkout saves each order to MongoDB and shows a confirmation with a private order status link. Payment is still a demo and no payment card details are collected.
+- Checkout creates a Stripe-hosted payment session. Product prices, accepted offers, delivery fees and order contents are recalculated on the server; customer card details never pass through PennyBuys. Automatic Tax is enabled, and Stripe webhook confirmation is required before an order changes to processing.
 - Customers can look up an order using its number and checkout email. Staff can use the Orders section in `admin-products.html` to change status and add the tracking number shown to the customer once the order is on the way. `admin-orders.html` redirects to that section.
 - Order statuses are: Order is being processed, Packed and ready for delivery, On the way for delivery, and Delivered.
-- Payment is not connected; order records and delivery status changes are stored in MongoDB so they can be managed across devices.
+- Pending and paid order records and delivery status changes are stored in MongoDB so they can be managed across devices.
 - Existing demo product photography is loaded from Unsplash. New admin uploads are stored in Cloudinary and appear in the storefront catalog.
 
-Basket contents remain in browser storage, while customer accounts and order records are stored in MongoDB. Payment is not connected. The product admin is protected by a shared server-side token; replace it with full user and role management before opening the admin to multiple staff members. Keep payment credentials and Cloudinary secrets on the server, not in browser code.
+Basket contents remain in browser storage, while customer accounts and order records are stored in MongoDB. The product admin is protected by a shared server-side token; replace it with full user and role management before opening the admin to multiple staff members. Keep payment credentials and Cloudinary secrets on the server, not in browser code.
+
+## Stripe Payments and Tax setup
+
+The Stripe CLI and Stripe Codex agent plugin were installed during setup. The requested `stripe_implementation_planner` MCP tool is not exposed in this environment, so this integration follows Stripe Checkout and Tax guidance directly.
+
+1. In Stripe Dashboard, create test API keys and enter them privately in local `.env` as `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`; never put secret keys in browser code or commit them. Set `PUBLIC_BASE_URL=http://localhost:3000` for local use.
+2. Enable Stripe Tax and review your business address, tax registrations, product tax classifications and inclusive/exclusive pricing in Dashboard. PennyBuys sells varied goods; verify the appropriate tax treatment for each category before live transactions. Checkout requests a shipping address and calculates tax automatically.
+3. Start the app with `npm start`, then run `stripe login` and `stripe listen --forward-to localhost:3000/api/stripe/webhook` in a separate terminal. Copy the listener's `whsec_...` value into `.env` as `STRIPE_WEBHOOK_SECRET` and restart the server.
+4. In Railway, set `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `PUBLIC_BASE_URL=https://pennybuys.co.uk`, plus the tax behavior and allowed countries. Add a Stripe Dashboard webhook endpoint at `https://pennybuys.co.uk/api/stripe/webhook` for `checkout.session.completed`, `checkout.session.async_payment_succeeded`, and `checkout.session.expired`; copy its signing secret into Railway Variables.
+5. Verify the full flow in Stripe test mode, including successful and cancelled payment, automatic tax, and webhook-driven order status, before switching to live keys.
 
 ## Live support chat and browser notifications
 
@@ -60,7 +71,7 @@ Basket contents remain in browser storage, while customer accounts and order rec
 - New orders are saved in MongoDB. Admins can update their delivery status and tracking number; the customer order page refreshes status from the server.
 - Customers can opt in to browser alerts at checkout or on the contact page. Staff can enable new chat and order alerts from the Support chat page. Admins can also send an important update from Commercials. New arrivals and order status changes trigger push notifications for matching subscriptions.
 - Browser push requires HTTPS and VAPID keys. Generate a key pair with `npx web-push generate-vapid-keys`, then set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` in Railway Variables (or local `.env`). Keep the private key secret and do not commit it. The browser permission prompt is shown only after a customer or staff member chooses to enable alerts.
-- Push alerts are optional; customers can still browse, chat and track their order when browser push is unavailable. The payment method is still a demo and is not connected to a payment processor.
+- Push alerts are optional; customers can still browse, chat and track their order when browser push is unavailable. Stripe checkout requires its server environment keys and webhook endpoint to be configured.
 
 
 ## Installable PennyBuys shopping app
