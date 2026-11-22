@@ -454,7 +454,6 @@ app.post('/api/stripe/checkout-session', async (req, res) => {
         submit_type: 'auto',
         shipping_address_collection: { allowed_countries: ['AD','AL','AT','AX','BA','BE','BG','BY','CH','CZ','DE','DK','EE','ES','FI','FO','FR','GB','GG','GI','GR','HR','HU','IE','IM','IS','IT','JE','LI','LT','LU','LV','MC','MD','ME','MK','MT','NL','NO','PL','PT','RO','RS','RU','SE','SI','SJ','SK','SM','UA','VA'] },
         name_collection: { individual: { enabled: true, optional: true }, business: { enabled: true, optional: true } },
-        saved_payment_method_options: { payment_method_save: 'enabled' },
         integration_identifier: 'custom_embedded_web_0001',
         return_url: `${baseUrl}/order.html?id=${encodeURIComponent(id)}&key=${encodeURIComponent(accessKey)}&paid=1&session_id={CHECKOUT_SESSION_ID}`
       });
