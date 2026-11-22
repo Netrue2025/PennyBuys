@@ -29,7 +29,7 @@ Configure these environment variables locally in `.env` or in Railway's service 
 - `MONGODB_URI` and optional `MONGODB_DB_NAME` (defaults to `pennybuys`).
 - Either `CLOUDINARY_URL` or `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET`.
 - `PORT` is provided by Railway; local default is `3000`.
-- `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` are server-only. Set `STRIPE_TAX_BEHAVIOR` to `inclusive` (default) or `exclusive`, `STRIPE_ALLOWED_COUNTRIES` to ISO country codes (default `GB`), and `PUBLIC_BASE_URL` to the public HTTPS site URL.
+- `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` are server-only. `STRIPE_PUBLISHABLE_KEY` is safe to return to the browser. Set `STRIPE_TAX_BEHAVIOR` to `inclusive` (default) or `exclusive`, and `PUBLIC_BASE_URL` to the public HTTPS site URL.
 
 The first MongoDB connection seeds the collection with the current demo products when it is empty. The storefront's `/products-data.js` endpoint then serves current MongoDB products to the home, catalog, product and checkout pages. If MongoDB is unconfigured or temporarily unreachable, the storefront and admin inventory list fall back to the bundled demo data; adding products still requires a working database. Replace `MONGODB_URI` in your local `.env` with the real URI from MongoDB Atlas. Keep `.env` and all API secrets out of source control; `.env.example` contains placeholders only.
 
@@ -47,7 +47,7 @@ For Railway's optional deployment health check, use `/health`. In service Networ
 - The shopping bag is saved in the current browser using local storage.
 - Customer accounts are stored in MongoDB; passwords are stored as salted hashes, and sign-in uses a protected session cookie.
 - Newsletter subscriptions are saved in MongoDB and can be viewed in the admin Subscribers section.
-- Checkout creates a Stripe-hosted payment session. Product prices, accepted offers, delivery fees and order contents are recalculated on the server; customer card details never pass through PennyBuys. Automatic Tax is enabled, and Stripe webhook confirmation is required before an order changes to processing.
+- Checkout embeds Stripe's Checkout Form. Product prices, accepted offers, delivery fees and order contents are recalculated on the server; card details stay in Stripe's iframe. Automatic Tax is disabled by the current Checkout Studio settings, and signed Stripe webhook confirmation is required before an order changes to processing.
 - Customers can look up an order using its number and checkout email. Staff can use the Orders section in `admin-products.html` to change status and add the tracking number shown to the customer once the order is on the way. `admin-orders.html` redirects to that section.
 - Order statuses are: Order is being processed, Packed and ready for delivery, On the way for delivery, and Delivered.
 - Pending and paid order records and delivery status changes are stored in MongoDB so they can be managed across devices.
@@ -57,13 +57,13 @@ Basket contents remain in browser storage, while customer accounts and order rec
 
 ## Stripe Payments and Tax setup
 
-The Stripe CLI and Stripe Codex agent plugin were installed during setup. The requested `stripe_implementation_planner` MCP tool is not exposed in this environment, so this integration follows Stripe Checkout and Tax guidance directly.
+The Stripe CLI and Stripe Codex agent plugin were installed during setup. The requested `stripe_implementation_planner` MCP tool is not exposed in this environment, so this integration follows Stripe's Checkout Form API reference directly.
 
-1. In Stripe Dashboard, create test API keys and enter them privately in local `.env` as `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`; never put secret keys in browser code or commit them. Set `PUBLIC_BASE_URL=http://localhost:3000` for local use.
-2. Enable Stripe Tax and review your business address, tax registrations, product tax classifications and inclusive/exclusive pricing in Dashboard. PennyBuys sells varied goods; verify the appropriate tax treatment for each category before live transactions. Checkout requests a shipping address and calculates tax automatically.
-3. Start the app with `npm start`, then run `stripe login` and `stripe listen --events checkout.session.completed,checkout.session.async_payment_succeeded,checkout.session.expired --forward-to localhost:3000/api/stripe/webhook` in a separate terminal. The listener requires an explicit event list. Copy its `whsec_...` value into `.env` as `STRIPE_WEBHOOK_SECRET` and restart the server.
-4. In Railway, set `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `PUBLIC_BASE_URL=https://pennybuys.co.uk`, plus the tax behavior and allowed countries. Add a Stripe Dashboard webhook endpoint at `https://pennybuys.co.uk/api/stripe/webhook` for `checkout.session.completed`, `checkout.session.async_payment_succeeded`, and `checkout.session.expired`; copy its signing secret into Railway Variables.
-5. Verify the full flow in Stripe test mode, including successful and cancelled payment, automatic tax, and webhook-driven order status, before switching to live keys.
+1. In Stripe Dashboard, create test API keys and set local `.env` variables `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY` and `STRIPE_WEBHOOK_SECRET`; never commit secret keys. Set `PUBLIC_BASE_URL=http://localhost:3000` for local use.
+2. Request/enable access to Stripe's Checkout Form beta for `ui_mode: form`. The current Checkout Studio settings disable automatic tax; tax must be configured separately before launch if required. PennyBuys sells varied goods, so review product tax treatment and business registrations before live transactions.
+3. Start the app with `npm start`, then run `stripe login` and `stripe listen --events checkout.session.completed,checkout.session.async_payment_succeeded,checkout.session.expired --forward-to localhost:3000/api/stripe/webhook` in a separate terminal. Copy its `whsec_...` value into `.env` as `STRIPE_WEBHOOK_SECRET` and restart the server.
+4. In Railway, set `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET` and `PUBLIC_BASE_URL=https://pennybuys.co.uk`. Add a Stripe Dashboard webhook endpoint at `https://pennybuys.co.uk/api/stripe/webhook` for `checkout.session.completed`, `checkout.session.async_payment_succeeded`, and `checkout.session.expired`; copy its signing secret into Railway Variables.
+5. Verify the full flow in Stripe test mode, including successful and cancelled payment and webhook-driven order status. Automatic Tax is disabled in the current Session configuration; before switching to live keys, confirm tax handling is correctly configured for PennyBuys.
 
 ## Live support chat and browser notifications
 

@@ -5,6 +5,7 @@ const escapeHTML=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;'
 function readOrders(){try{return JSON.parse(localStorage.getItem(ordersKey)||'[]')}catch{return []}}
 function formatDate(value){const date=new Date(value);return Number.isNaN(date.valueOf())?'':new Intl.DateTimeFormat('en-GB',{dateStyle:'medium',timeStyle:'short'}).format(date)}
 const query=new URLSearchParams(location.search);
+if(query.has('paid'))localStorage.removeItem('pennybuys-bag');
 const lookup=document.querySelector('#order-lookup');
 let visibleOrder=null;let activeLookup=null;let refreshTimer;
 function showOrder(order){

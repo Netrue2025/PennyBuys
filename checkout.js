@@ -37,7 +37,7 @@ if(!lines.length){empty.hidden=false;}else{
     activeOffer=(saved.offers||[]).find(offer=>offer.status==='accepted')||null;renderCheckoutPrices();
   }).catch(()=>{});
 }
-document.querySelector('#checkout-form').addEventListener('submit',async event=>{
+document.querySelector('#checkout-contact-form').addEventListener('submit',async event=>{
   event.preventDefault();if(!lines.length||!event.currentTarget.reportValidity())return;
   const submit=event.currentTarget.querySelector('[type="submit"]');if(submit.disabled)return;submit.disabled=true;
   try{
@@ -45,6 +45,26 @@ document.querySelector('#checkout-form').addEventListener('submit',async event=>
     if(document.querySelector('#checkout-push-optin')?.checked){try{await window.PennyBuysPush.subscribe({email:data.email.trim()})}catch(error){console.warn('Order push notifications were not enabled:',error.message)}}
     const response=await fetch('/api/stripe/checkout-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({customer:{name:data.name.trim(),email:data.email.trim(),phone:data.phone.trim()},items:lines.map(({product,qty})=>({id:product.id,qty}))})});
     const result=await response.json().catch(()=>({}));if(!response.ok)throw new Error(result.error||'Secure checkout could not be started.');
-    if(!result.url)throw new Error('Stripe did not return a checkout link. Please try again.');location.assign(result.url);
-  }catch(error){window.alert(error.message);submit.disabled=false;}
+    if(!result.client_secret||!result.publishable_key||!result.order_url)throw new Error('Stripe Checkout is not configured. Add STRIPE_PUBLISHABLE_KEY to the server environment.');
+    if(typeof Stripe!=='function')throw new Error('Stripe.js did not load. Refresh the page and try again.');
+    const stripe=Stripe(result.publishable_key);
+    const appearance={theme:'stripe',labels:'auto',inputs:'spaced',variables:{borderRadius:'4px',colorBackground:'#ffffff',colorDanger:'#df1b41',colorPrimary:'#0570de',colorSuccess:'#00c853',colorText:'#30313d',fontFamily:'default',fontSizeBase:'16px',spacingUnit:'4px'}};
+    const checkout=stripe.initCheckoutFormSdk({clientSecret:Promise.resolve(result.client_secret),appearance});
+    const form=checkout.createForm({layout:'expanded'});
+    document.querySelector('#checkout-contact-form').hidden=true;
+    const panel=document.querySelector('#stripe-payment-panel');panel.hidden=false;
+    form.mount('#stripe-checkout-form');
+    const actionsResult=await checkout.loadActions();
+    if(actionsResult.type!=='success')throw new Error(actionsResult.error?.message||'The secure payment form could not load.');
+    form.on('confirm',async confirmEvent=>{
+      try{
+        const confirmResult=await actionsResult.actions.confirm({formConfirmEvent:confirmEvent});
+        if(confirmResult.type==='error'){
+          const error=document.querySelector('#stripe-checkout-error');error.textContent=confirmResult.error.message;error.hidden=false;return;
+        }
+        localStorage.removeItem(bagKey);
+        window.location.assign(result.order_url);
+      }catch(error){const message=document.querySelector('#stripe-checkout-error');message.textContent=error.message||'Payment could not be completed.';message.hidden=false}
+    });
+  }catch(error){window.alert(error.message);document.querySelector('#checkout-contact-form').hidden=false;document.querySelector('#stripe-payment-panel').hidden=true;submit.disabled=false;}
 });

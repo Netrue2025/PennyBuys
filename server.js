@@ -16,7 +16,8 @@ const Stripe = require('stripe');
 const root = __dirname;
 const app = express();
 const port = Number(process.env.PORT || 3000);
-const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
+const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2026-03-25.dahlia' }) : null;
+const stripePublishableKey = process.env.STRIPE_PUBLISHABLE_KEY || '';
 const stripeTaxBehavior = process.env.STRIPE_TAX_BEHAVIOR === 'exclusive' ? 'exclusive' : 'inclusive';
 const configuredMongoUri = (process.env.MONGODB_URI || '').trim();
 const mongoUri = configuredMongoUri && !/cluster\.example\.mongodb\.net|username:password@/i.test(configuredMongoUri) ? configuredMongoUri : '';
@@ -203,9 +204,9 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
     if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
       if (session.payment_status !== 'paid') return res.json({ received: true });
       const orders = await getStoreCollection('orders');
-      const orderId = String(session.metadata?.orderId || '');
-      const order = await orders?.findOne({ id: orderId, stripeSessionId: session.id });
+      const order = await orders?.findOne({ stripeSessionId: session.id });
       if (!order) return res.status(404).send('Pending order not found.');
+      const orderId = order.id;
       if (order.paymentStatus !== 'paid') {
         const now = new Date();
         const details = session.customer_details || {};
@@ -219,7 +220,7 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
           history, paidAt: now, updatedAt: now
         } });
         if (paidUpdate.modifiedCount) {
-          const offerId = String(session.metadata?.offerId || '');
+          const offerId = String(order.offerId || '');
           if (offerId) await client.db(mongoDbName).collection('storeCommercials').updateOne({ type: 'customer-offer', email: order.customer.email, offerId, status: 'accepted' }, { $set: { status: 'redeemed', redeemedAt: now } });
           void dispatchPush({ audience: 'admin' }, { title: 'Paid PennyBuys order', body: `${order.customer.name} paid for ${orderId}.`, url: '/admin-order-management.html', tag: `order-${orderId}` });
           void dispatchPush({ email: order.customer.email }, { title: 'Order received', body: `Order ${orderId} is now being processed.`, url: `/order.html?id=${encodeURIComponent(orderId)}`, tag: `order-${orderId}` });
@@ -391,7 +392,7 @@ app.post('/api/admin/orders/import-browser-history', requireAdmin, async (req, r
 });
 
 app.post('/api/stripe/checkout-session', async (req, res) => {
-  if (!stripe) return res.status(503).json({ error: 'Configure STRIPE_SECRET_KEY on the server before accepting payments.' });
+  if (!stripe || !stripePublishableKey) return res.status(503).json({ error: 'Configure STRIPE_SECRET_KEY and STRIPE_PUBLISHABLE_KEY on the server before accepting payments.' });
   const customer = req.body?.customer || {};
   const name = String(customer.name || req.customer?.name || '').trim().slice(0, 100);
   const email = String(customer.email || req.customer?.email || '').trim().toLowerCase();
@@ -436,23 +437,29 @@ app.post('/api/stripe/checkout-session', async (req, res) => {
     const id = `PB-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
     const accessKey = crypto.randomBytes(32).toString('base64url');
     const now = new Date();
-    const order = { id, createdAt: now, status: 'pending_payment', paymentStatus: 'pending', trackingNumber: '', customer: { name, email, phone }, address: {}, paymentMethod: 'Stripe', items, subtotal, discount, offerTitle: acceptedOffer?.title || '', delivery, deliveryWeightKg: allWeight, chargeableDeliveryWeightKg: chargeableWeight, total: Math.max(0, subtotal - discount) + delivery, history: [], accessKeyHash: crypto.createHash('sha256').update(accessKey).digest('hex') };
+    const order = { id, createdAt: now, status: 'pending_payment', paymentStatus: 'pending', trackingNumber: '', customer: { name, email, phone }, address: {}, paymentMethod: 'Stripe', items, subtotal, discount, offerId: acceptedOffer?.offerId || '', offerTitle: acceptedOffer?.title || '', delivery, deliveryWeightKg: allWeight, chargeableDeliveryWeightKg: chargeableWeight, total: Math.max(0, subtotal - discount) + delivery, history: [], accessKeyHash: crypto.createHash('sha256').update(accessKey).digest('hex') };
     const orders = await getStoreCollection('orders');
     if (!orders) return res.status(503).json({ error: 'Order checkout needs a MongoDB connection.' });
     await orders.insertOne(order);
     try {
       const lineItems = [...discountedProducts];
-      const shippingOptions = delivery > 0 ? [{ shipping_rate_data: { type: 'fixed_amount', display_name: 'Delivery', fixed_amount: { amount: Math.round(delivery * 100), currency: 'gbp', tax_behavior: stripeTaxBehavior } } }] : [];
+      if (delivery > 0) lineItems.push({ quantity: 1, price_data: { currency: 'gbp', unit_amount: Math.round(delivery * 100), tax_behavior: stripeTaxBehavior, product_data: { name: 'Delivery' } } });
       const checkoutSession = await stripe.checkout.sessions.create({
-        mode: 'payment', payment_method_types: ['card'], automatic_tax: { enabled: true },
-        billing_address_collection: 'required', shipping_address_collection: { allowed_countries: (process.env.STRIPE_ALLOWED_COUNTRIES || 'GB').split(',').map(value => value.trim().toUpperCase()).filter(Boolean) },
-        phone_number_collection: { enabled: true }, customer_email: email, line_items: lineItems, shipping_options: shippingOptions,
-        client_reference_id: id, metadata: { orderId: id, offerId: acceptedOffer?.offerId || '' },
-        success_url: `${baseUrl}/order.html?id=${encodeURIComponent(id)}&key=${encodeURIComponent(accessKey)}&paid=1`,
-        cancel_url: `${baseUrl}/checkout.html?cancelled=1`
+        ui_mode: 'form',
+        mode: 'payment',
+        line_items: lineItems,
+        billing_address_collection: 'auto',
+        phone_number_collection: { enabled: false },
+        automatic_tax: { enabled: false },
+        submit_type: 'auto',
+        shipping_address_collection: { allowed_countries: ['AD','AL','AT','AX','BA','BE','BG','BY','CH','CZ','DE','DK','EE','ES','FI','FO','FR','GB','GG','GI','GR','HR','HU','IE','IM','IS','IT','JE','LI','LT','LU','LV','MC','MD','ME','MK','MT','NL','NO','PL','PT','RO','RS','RU','SE','SI','SJ','SK','SM','UA','VA'] },
+        name_collection: { individual: { enabled: true, optional: true }, business: { enabled: true, optional: true } },
+        saved_payment_method_options: { payment_method_save: 'enabled' },
+        integration_identifier: 'custom_embedded_web_0001',
+        return_url: `${baseUrl}/order.html?id=${encodeURIComponent(id)}&key=${encodeURIComponent(accessKey)}&paid=1&session_id={CHECKOUT_SESSION_ID}`
       });
       await orders.updateOne({ id }, { $set: { stripeSessionId: checkoutSession.id } });
-      res.json({ url: checkoutSession.url });
+      res.json({ client_secret: checkoutSession.client_secret, publishable_key: stripePublishableKey, order_url: `${baseUrl}/order.html?id=${encodeURIComponent(id)}&key=${encodeURIComponent(accessKey)}&paid=1` });
     } catch (error) { await orders.deleteOne({ id, paymentStatus: 'pending' }); throw error; }
   } catch (error) { console.error('Stripe checkout session failed:', error.message); res.status(503).json({ error: error.message.startsWith('Product ') ? error.message : 'Secure checkout could not be started. Please try again.' }); }
 });
@@ -460,14 +467,14 @@ app.post('/api/stripe/checkout-session', async (req, res) => {
 app.post('/api/orders/lookup', async (req, res) => {
   const id = String(req.body?.id || '').trim(); const email = String(req.body?.email || '').trim().toLowerCase();
   if (!id || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Enter your order number and checkout email.' });
-  try { const collection = await getStoreCollection('orders'); const order = await collection?.findOne({ id, 'customer.email': email }, { projection: { _id: 0, accessKeyHash: 0, stripeSessionId: 0, stripePaymentIntent: 0, stripeUrl: 0 } }); if (!order) return res.status(404).json({ error: 'We could not find an order with those details.' }); res.json({ order }); }
+  try { const collection = await getStoreCollection('orders'); const order = await collection?.findOne({ id, 'customer.email': email }, { projection: { _id: 0, accessKeyHash: 0, stripeSessionId: 0, stripePaymentIntent: 0, stripeUrl: 0, offerId: 0 } }); if (!order) return res.status(404).json({ error: 'We could not find an order with those details.' }); res.json({ order }); }
   catch (error) { console.error('Order lookup failed:', error.message); res.status(503).json({ error: 'Order tracking is temporarily unavailable.' }); }
 });
 
 app.get('/api/orders/:id', async (req, res) => {
   const key = String(req.query.key || '');
   if (key.length < 32) return res.status(401).json({ error: 'Use the private order link or enter your order number and email.' });
-  try { const collection = await getStoreCollection('orders'); const accessKeyHash = crypto.createHash('sha256').update(key).digest('hex'); const order = await collection?.findOne({ id: req.params.id, accessKeyHash }, { projection: { _id: 0, accessKeyHash: 0, stripeSessionId: 0, stripePaymentIntent: 0, stripeUrl: 0 } }); if (!order) return res.status(404).json({ error: 'This private order link is not valid.' }); res.set('Cache-Control', 'no-store').json({ order }); }
+  try { const collection = await getStoreCollection('orders'); const accessKeyHash = crypto.createHash('sha256').update(key).digest('hex'); const order = await collection?.findOne({ id: req.params.id, accessKeyHash }, { projection: { _id: 0, accessKeyHash: 0, stripeSessionId: 0, stripePaymentIntent: 0, stripeUrl: 0, offerId: 0 } }); if (!order) return res.status(404).json({ error: 'This private order link is not valid.' }); res.set('Cache-Control', 'no-store').json({ order }); }
   catch (error) { console.error('Private order tracking failed:', error.message); res.status(503).json({ error: 'Order tracking is temporarily unavailable.' }); }
 });
 
