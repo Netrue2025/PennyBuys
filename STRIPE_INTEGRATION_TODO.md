@@ -31,16 +31,11 @@ These Checkout Studio parameters are already configured in the integration.
 | Parameter | Value |
 |-----------|-------|
 | `ui_mode` | `form` |
-| `billing_address_collection` | `auto` |
-| `phone_number_collection.enabled` | `false` |
 | `automatic_tax.enabled` | `false` |
 | `submit_type` | `auto` |
-| `shipping_address_collection.allowed_countries` | `AD, AL, AT, AX, BA, BE, BG, BY, CH, CZ, DE, DK, EE, ES, FI, FO, FR, GB, GG, GI, GR, HR, HU, IE, IM, IS, IT, JE, LI, LT, LU, LV, MC, MD, ME, MK, MT, NL, NO, PL, PT, RO, RS, RU, SE, SI, SJ, SK, SM, UA, VA` |
-| `name_collection.individual` | `{ enabled: true, optional: true }` |
-| `name_collection.business` | `{ enabled: true, optional: true }` |
 | `integration_identifier` | `custom_embedded_web_0001` |
 
-`payment_method_collection` is omitted because this is a one-time `payment` Session; Stripe only accepts that parameter in `subscription` mode. A `return_url` is also configured so redirect-based payment methods can return customers to their private order status page.
+`payment_method_collection` is omitted because this is a one-time `payment` Session; Stripe only accepts that parameter in `subscription` mode. PennyBuys collects contact and UK delivery details locally and stores them on the pending order. The Checkout Session receives no customer, phone, billing-address, or shipping-address fields. PennyBuys keeps those details on the pending order in MongoDB. Stripe handles only payment details, except for any billing fields required by the selected payment method. A `return_url` is configured for redirect-based payment methods.
 
 ## Setup and Next Steps
 

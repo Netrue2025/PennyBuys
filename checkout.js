@@ -43,7 +43,7 @@ document.querySelector('#checkout-contact-form').addEventListener('submit',async
   try{
     const data=Object.fromEntries(new FormData(event.currentTarget).entries());
     if(document.querySelector('#checkout-push-optin')?.checked){try{await window.PennyBuysPush.subscribe({email:data.email.trim()})}catch(error){console.warn('Order push notifications were not enabled:',error.message)}}
-    const response=await fetch('/api/stripe/checkout-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({customer:{name:data.name.trim(),email:data.email.trim(),phone:data.phone.trim()},items:lines.map(({product,qty})=>({id:product.id,qty}))})});
+    const response=await fetch('/api/stripe/checkout-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({customer:{name:data.name.trim(),email:data.email.trim(),phone:data.phone.trim()},address:{line1:data.addressLine1.trim(),line2:data.addressLine2.trim(),city:data.city.trim(),postcode:data.postcode.trim(),country:data.country},items:lines.map(({product,qty})=>({id:product.id,qty}))})});
     const result=await response.json().catch(()=>({}));if(!response.ok)throw new Error(result.error||'Secure checkout could not be started.');
     if(!result.client_secret||!result.publishable_key||!result.order_url)throw new Error('Stripe Checkout is not configured. Add STRIPE_PUBLISHABLE_KEY to the server environment.');
     if(typeof Stripe!=='function')throw new Error('Stripe.js did not load. Refresh the page and try again.');

@@ -19,6 +19,7 @@ const port = Number(process.env.PORT || 3000);
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2026-03-25.dahlia' }) : null;
 const stripePublishableKey = process.env.STRIPE_PUBLISHABLE_KEY || '';
 const stripeTaxBehavior = process.env.STRIPE_TAX_BEHAVIOR === 'exclusive' ? 'exclusive' : 'inclusive';
+const allowedDeliveryCountries = (process.env.STRIPE_ALLOWED_COUNTRIES || 'GB').split(',').map(country => country.trim().toUpperCase()).filter(country => /^[A-Z]{2}$/.test(country));
 const configuredMongoUri = (process.env.MONGODB_URI || '').trim();
 const mongoUri = configuredMongoUri && !/cluster\.example\.mongodb\.net|username:password@/i.test(configuredMongoUri) ? configuredMongoUri : '';
 const mongoDbName = process.env.MONGODB_DB_NAME || 'pennybuys';
@@ -209,14 +210,12 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
       const orderId = order.id;
       if (order.paymentStatus !== 'paid') {
         const now = new Date();
-        const details = session.customer_details || {};
-        const address = session.shipping_details?.address || details.address || {};
         const history = [...(order.history || []), { status: 'processing', at: now }];
         const paidUpdate = await orders.updateOne({ id: orderId, paymentStatus: { $ne: 'paid' } }, { $set: {
           status: 'processing', paymentStatus: 'paid', paymentMethod: 'Stripe', stripePaymentIntent: session.payment_intent || '',
           total: Number(session.amount_total || 0) / 100, tax: Number(session.total_details?.amount_tax || 0) / 100,
-          customer: { ...order.customer, email: details.email || session.customer_email || order.customer.email, phone: details.phone || order.customer.phone },
-          address: { line1: address.line1 || '', line2: address.line2 || '', city: address.city || '', postcode: address.postal_code || '', country: address.country || '' },
+          customer: order.customer,
+          address: order.address,
           history, paidAt: now, updatedAt: now
         } });
         if (paidUpdate.modifiedCount) {
@@ -397,8 +396,17 @@ app.post('/api/stripe/checkout-session', async (req, res) => {
   const name = String(customer.name || req.customer?.name || '').trim().slice(0, 100);
   const email = String(customer.email || req.customer?.email || '').trim().toLowerCase();
   const phone = String(customer.phone || '').trim().slice(0, 40);
+  const submittedAddress = req.body?.address || {};
+  const address = {
+    line1: String(submittedAddress.line1 || '').trim().slice(0, 180),
+    line2: String(submittedAddress.line2 || '').trim().slice(0, 180),
+    city: String(submittedAddress.city || '').trim().slice(0, 100),
+    postcode: String(submittedAddress.postcode || '').trim().slice(0, 30),
+    country: String(submittedAddress.country || '').trim().toUpperCase()
+  };
   const requested = Array.isArray(req.body?.items) ? req.body.items.slice(0, 50) : [];
   if (name.length < 2 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !requested.length) return res.status(400).json({ error: 'Enter valid contact details and add at least one product.' });
+  if (!address.line1 || !address.city || !address.postcode || !allowedDeliveryCountries.includes(address.country)) return res.status(400).json({ error: 'Enter a complete delivery address in a supported country.' });
   const quantities = new Map();
   for (const line of requested) {
     const id = String(line?.id || '').slice(0, 100);
@@ -437,7 +445,7 @@ app.post('/api/stripe/checkout-session', async (req, res) => {
     const id = `PB-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
     const accessKey = crypto.randomBytes(32).toString('base64url');
     const now = new Date();
-    const order = { id, createdAt: now, status: 'pending_payment', paymentStatus: 'pending', trackingNumber: '', customer: { name, email, phone }, address: {}, paymentMethod: 'Stripe', items, subtotal, discount, offerId: acceptedOffer?.offerId || '', offerTitle: acceptedOffer?.title || '', delivery, deliveryWeightKg: allWeight, chargeableDeliveryWeightKg: chargeableWeight, total: Math.max(0, subtotal - discount) + delivery, history: [], accessKeyHash: crypto.createHash('sha256').update(accessKey).digest('hex') };
+    const order = { id, createdAt: now, status: 'pending_payment', paymentStatus: 'pending', trackingNumber: '', customer: { name, email, phone }, address: { ...address, country: address.country === 'GB' ? 'United Kingdom' : address.country }, paymentMethod: 'Stripe', items, subtotal, discount, offerId: acceptedOffer?.offerId || '', offerTitle: acceptedOffer?.title || '', delivery, deliveryWeightKg: allWeight, chargeableDeliveryWeightKg: chargeableWeight, total: Math.max(0, subtotal - discount) + delivery, history: [], accessKeyHash: crypto.createHash('sha256').update(accessKey).digest('hex') };
     const orders = await getStoreCollection('orders');
     if (!orders) return res.status(503).json({ error: 'Order checkout needs a MongoDB connection.' });
     await orders.insertOne(order);
@@ -448,12 +456,8 @@ app.post('/api/stripe/checkout-session', async (req, res) => {
         ui_mode: 'form',
         mode: 'payment',
         line_items: lineItems,
-        billing_address_collection: 'auto',
-        phone_number_collection: { enabled: false },
         automatic_tax: { enabled: false },
         submit_type: 'auto',
-        shipping_address_collection: { allowed_countries: ['AD','AL','AT','AX','BA','BE','BG','BY','CH','CZ','DE','DK','EE','ES','FI','FO','FR','GB','GG','GI','GR','HR','HU','IE','IM','IS','IT','JE','LI','LT','LU','LV','MC','MD','ME','MK','MT','NL','NO','PL','PT','RO','RS','RU','SE','SI','SJ','SK','SM','UA','VA'] },
-        name_collection: { individual: { enabled: true, optional: true }, business: { enabled: true, optional: true } },
         integration_identifier: 'custom_embedded_web_0001',
         return_url: `${baseUrl}/order.html?id=${encodeURIComponent(id)}&key=${encodeURIComponent(accessKey)}&paid=1&session_id={CHECKOUT_SESSION_ID}`
       });
