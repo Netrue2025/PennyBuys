@@ -10,6 +10,10 @@ if(deliveryCountry&&Array.isArray(window.PENNYBUYS_COUNTRY_CODES)){
     deliveryCountry.value='GB';
   }catch(error){console.warn('The country selector could not be expanded:',error.message)}
 }
+window.addEventListener('pennybuys:productavailabilitychange',event=>{
+  const country=event.detail?.country;
+  if(country&&deliveryCountry&&[...deliveryCountry.options].some(option=>option.value===country))deliveryCountry.value=country;
+});
 const bagKey='pennybuys-bag';
 const money=value=>window.PennyBuysCurrency?.format(value)||`£${Number(value).toFixed(2)}`;
 const escapeHTML=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
@@ -17,6 +21,22 @@ function readBag(){try{return JSON.parse(localStorage.getItem(bagKey)||'[]')}cat
 const bag=readBag().filter(line=>products.some(product=>product.id===line.id)&&Number(line.qty)>0);
 const basketCount=document.querySelector('[data-basket-count]');if(basketCount)basketCount.textContent=bag.reduce((sum,line)=>sum+Number(line.qty),0);
 const lines=bag.map(line=>({product:products.find(product=>product.id===line.id),qty:Number(line.qty)}));
+window.addEventListener('pennybuys:productavailabilitychange',event=>{
+  const country=event.detail?.country;
+  if(!country)return;
+  const allowedIds=new Set(event.detail.products.map(product=>product.id));
+  const eligible=bag.filter(line=>allowedIds.has(line.id));
+  if(eligible.length!==bag.length){
+    localStorage.setItem(bagKey,JSON.stringify(eligible));
+    const noticeKey=`pennybuys-checkout-country-filter-${country}`;
+    if(!sessionStorage.getItem(noticeKey)){sessionStorage.setItem(noticeKey,'1');sessionStorage.setItem('pennybuys-checkout-country-notice','Some basket items are not available in your detected country and were removed.');}
+    location.reload();
+    return;
+  }
+  if(deliveryCountry&&[...deliveryCountry.options].some(option=>option.value===country))deliveryCountry.value=country;
+});
+const marketNotice=sessionStorage.getItem('pennybuys-checkout-country-notice');
+if(marketNotice){window.alert(marketNotice);sessionStorage.removeItem('pennybuys-checkout-country-notice')}
 const subtotal=lines.reduce((sum,line)=>sum+line.product.price*line.qty,0);
 const itemCount=lines.reduce((sum,line)=>sum+line.qty,0);
 let freeDeliveryCount=0,deliveryConfig={},activeOffer=null;
@@ -55,8 +75,9 @@ document.querySelector('#checkout-contact-form').addEventListener('submit',async
   try{
     const data=Object.fromEntries(new FormData(event.currentTarget).entries());
     if(document.querySelector('#checkout-push-optin')?.checked){try{await window.PennyBuysPush.subscribe({email:data.email.trim()})}catch(error){console.warn('Order push notifications were not enabled:',error.message)}}
-    const response=await fetch('/api/stripe/checkout-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({customer:{name:data.name.trim(),email:data.email.trim(),phone:data.phone.trim()},address:{line1:data.addressLine1.trim(),line2:data.addressLine2.trim(),city:data.city.trim(),postcode:data.postcode.trim(),country:data.country},items:lines.map(({product,qty})=>({id:product.id,qty}))})});
+    const response=await fetch('/api/checkout/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({customer:{name:data.name.trim(),email:data.email.trim(),phone:data.phone.trim()},address:{line1:data.addressLine1.trim(),line2:data.addressLine2.trim(),city:data.city.trim(),postcode:data.postcode.trim(),country:data.country},items:lines.map(({product,qty})=>({id:product.id,qty}))})});
     const result=await response.json().catch(()=>({}));if(!response.ok)throw new Error(result.error||'Secure checkout could not be started.');
+    if(result.payment_provider==='Paystack'&&result.payment_url){window.location.assign(result.payment_url);return;}
     if(!result.client_secret||!result.publishable_key||!result.order_url)throw new Error('Stripe Checkout is not configured. Add STRIPE_PUBLISHABLE_KEY to the server environment.');
     if(typeof Stripe!=='function')throw new Error('Stripe.js did not load. Refresh the page and try again.');
     const stripe=Stripe(result.publishable_key);

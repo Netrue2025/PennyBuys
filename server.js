@@ -2,9 +2,7 @@ const path = require('node:path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const crypto = require('node:crypto');
-const fs = require('node:fs');
 const http = require('node:http');
-const vm = require('node:vm');
 const { promisify } = require('node:util');
 const express = require('express');
 const multer = require('multer');
@@ -20,6 +18,7 @@ const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SEC
 const stripePublishableKey = process.env.STRIPE_PUBLISHABLE_KEY || '';
 const stripeTaxBehavior = process.env.STRIPE_TAX_BEHAVIOR === 'exclusive' ? 'exclusive' : 'inclusive';
 const allowedDeliveryCountries = new Set(require('./country-codes.js'));
+const africanCountries = new Set('AO BF BI BJ BW CD CF CG CI CM CV DJ DZ EG EH ER ET GA GH GM GN GQ GW KE KM LR LS LY MA MG ML MR MU MW MZ NA NE NG RE RW SC SD SL SN SO SS ST SZ TD TG TN TZ UG YT ZA ZM ZW'.split(' '));
 const configuredMongoUri = (process.env.MONGODB_URI || '').trim();
 const mongoUri = configuredMongoUri && !/cluster\.example\.mongodb\.net|username:password@/i.test(configuredMongoUri) ? configuredMongoUri : '';
 const mongoDbName = process.env.MONGODB_DB_NAME || 'pennybuys';
@@ -34,7 +33,6 @@ if (pushConfigured) webpush.setVapidDetails(process.env.VAPID_SUBJECT || 'mailto
 const mongoUriIsPlaceholder = /cluster\.example\.mongodb\.net|username:password@/i.test(configuredMongoUri);
 const client = mongoUri ? new MongoClient(mongoUri, { serverSelectionTimeoutMS: 7000 }) : null;
 let databasePromise;
-let demoProducts;
 const storeIndexPromises = new Map();
 
 if (!process.env.CLOUDINARY_URL && process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET) {
@@ -44,16 +42,6 @@ if (!process.env.CLOUDINARY_URL && process.env.CLOUDINARY_CLOUD_NAME && process.
     api_secret: process.env.CLOUDINARY_API_SECRET,
     secure: true
   });
-}
-
-function getDemoProducts() {
-  if (!demoProducts) {
-    const sandbox = { window: {} };
-    const source = fs.readFileSync(path.join(root, 'products-data.js'), 'utf8');
-    new vm.Script(source, { filename: 'products-data.js' }).runInNewContext(sandbox, { timeout: 1000 });
-    demoProducts = sandbox.window.STORE_PRODUCTS;
-  }
-  return demoProducts;
 }
 
 async function getProductsCollection() {
@@ -97,19 +85,10 @@ async function dispatchPush(filter, notification) {
   } catch (error) { console.warn('Push notification could not be sent:', error.message); }
 }
 
-async function getDeletedDemoProductIds() {
-  if (!client) return new Set();
-  const records = await client.db(mongoDbName).collection('catalogOverrides').find({ type: 'deleted-demo-product' }, { projection: { id: 1, _id: 0 } }).toArray();
-  return new Set(records.map(record => record.id));
-}
-
 async function getStoreProducts() {
   const collection = await getProductsCollection();
-  const records = collection ? await collection.find({}, { projection: { _id: 0 } }).sort({ createdAt: -1 }).toArray() : [];
-  const deletedDemoIds = await getDeletedDemoProductIds();
-  const recordIds = new Set(records.map(product => product.id));
-  const demoProducts = getDemoProducts().filter(product => !deletedDemoIds.has(product.id) && !recordIds.has(product.id));
-  const products = [...records, ...demoProducts];
+  if (!collection) throw new Error('MongoDB is not configured.');
+  const products = await collection.find({}, { projection: { _id: 0 } }).sort({ createdAt: -1 }).toArray();
   const reviewCollection = client?.db(mongoDbName).collection('productReviews');
   const summaries = reviewCollection ? await reviewCollection.aggregate([
     { $match: { status: 'published' } },
@@ -122,8 +101,12 @@ async function getStoreProducts() {
   });
 }
 
-function withDefaultReviewStats(products) {
-  return products.map(product => ({ ...product, rating: '5.0', reviews: 0 }));
+function normalizeAvailableCountries(body) {
+  if (String(body.availabilityMode || 'all') !== 'selected') return null;
+  const raw = body.availableCountries;
+  const countries = [...new Set((Array.isArray(raw) ? raw : raw ? [raw] : []).map(code => String(code).trim().toUpperCase()).filter(Boolean))];
+  if (!countries.length || countries.some(code => !allowedDeliveryCountries.has(code))) throw new Error('Choose at least one valid country, or select all countries.');
+  return countries;
 }
 
 function safeEqual(left, right) {
@@ -140,7 +123,7 @@ function requireAdmin(req, res, next) {
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { files: 6, fileSize: maxUploadBytes, fields: 12, fieldSize: 20000 },
+  limits: { files: 6, fileSize: maxUploadBytes, fields: 300, fieldSize: 20000 },
   fileFilter(_req, file, callback) {
     const isImage = file.fieldname === 'images' && /^image\/(jpeg|png|webp|avif|gif)$/.test(file.mimetype);
     const isVideo = file.fieldname === 'video' && /^video\/(mp4|webm|quicktime)$/.test(file.mimetype);
@@ -232,7 +215,33 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
     res.json({ received: true });
   } catch (error) { console.error('Stripe webhook processing failed:', error.message); res.status(500).send('Webhook processing failed.'); }
 });
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '1mb', verify: (req, _res, buffer) => { req.rawBody = Buffer.from(buffer); } }));
+
+app.post('/api/paystack/webhook', async (req, res) => {
+  const secret = process.env.PAYSTACK_SECRET_KEY || '';
+  if (!secret) return res.status(503).send('Paystack is not configured.');
+  const signature = String(req.get('x-paystack-signature') || '');
+  const expected = crypto.createHmac('sha512', secret).update(req.rawBody || Buffer.alloc(0)).digest();
+  let supplied;
+  try { supplied = Buffer.from(signature, 'hex'); } catch { supplied = Buffer.alloc(0); }
+  if (!/^[a-f0-9]{128}$/i.test(signature) || supplied.length !== expected.length || !crypto.timingSafeEqual(expected, supplied)) return res.sendStatus(401);
+  const event = req.body;
+  if (event?.event !== 'charge.success' || event?.data?.status !== 'success') return res.json({ received: true });
+  try {
+    const orders = await getStoreCollection('orders');
+    const order = await orders?.findOne({ paystackReference: String(event.data.reference || '') });
+    if (!order) return res.status(404).send('Pending order not found.');
+    if (String(event.data.currency || '').toUpperCase() !== order.paystackCurrency || Number(event.data.amount) !== Number(order.paystackAmount)) return res.status(400).send('Payment amount does not match the order.');
+    const now = new Date();
+    const paid = await orders.updateOne({ id: order.id, paymentStatus: { $ne: 'paid' } }, { $set: { status: 'processing', paymentStatus: 'paid', paymentMethod: 'Paystack', paidCurrency: order.paystackCurrency, paidAmount: Number(event.data.amount) / 100, history: [...(order.history || []), { status: 'processing', at: now }], paidAt: now, updatedAt: now } });
+    if (paid.modifiedCount) {
+      if (order.offerId) await client.db(mongoDbName).collection('storeCommercials').updateOne({ type: 'customer-offer', email: order.customer.email, offerId: order.offerId, status: 'accepted' }, { $set: { status: 'redeemed', redeemedAt: now } });
+      void dispatchPush({ audience: 'admin' }, { title: 'Paid PennyBuys order', body: `${order.customer.name} paid for ${order.id}.`, url: '/admin-order-management.html', tag: `order-${order.id}` });
+      void dispatchPush({ email: order.customer.email }, { title: 'Order received', body: `Order ${order.id} is now being processed.`, url: `/order.html?id=${encodeURIComponent(order.id)}`, tag: `order-${order.id}` });
+    }
+    res.json({ received: true });
+  } catch (error) { console.error('Paystack webhook processing failed:', error.message); res.status(500).send('Webhook processing failed.'); }
+});
 
 function readCustomer(req) {
   const cookie = String(req.headers.cookie || '').split(';').map(part => part.trim()).find(part => part.startsWith('pennybuys_session='));
@@ -390,8 +399,7 @@ app.post('/api/admin/orders/import-browser-history', requireAdmin, async (req, r
   } catch (error) { console.error('Browser order migration failed:', error.message); res.status(503).json({ error: 'Existing browser orders could not be migrated.' }); }
 });
 
-app.post('/api/stripe/checkout-session', async (req, res) => {
-  if (!stripe || !stripePublishableKey) return res.status(503).json({ error: 'Configure STRIPE_SECRET_KEY and STRIPE_PUBLISHABLE_KEY on the server before accepting payments.' });
+app.post('/api/checkout/session', async (req, res) => {
   const customer = req.body?.customer || {};
   const name = String(customer.name || req.customer?.name || '').trim().slice(0, 100);
   const email = String(customer.email || req.customer?.email || '').trim().toLowerCase();
@@ -407,6 +415,11 @@ app.post('/api/stripe/checkout-session', async (req, res) => {
   const requested = Array.isArray(req.body?.items) ? req.body.items.slice(0, 50) : [];
   if (name.length < 2 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !requested.length) return res.status(400).json({ error: 'Enter valid contact details and add at least one product.' });
   if (!address.line1 || !address.city || !address.postcode || !allowedDeliveryCountries.has(address.country)) return res.status(400).json({ error: 'Enter a complete delivery address in a supported country.' });
+  const usePaystack = africanCountries.has(address.country);
+  const paystackRate = Number(process.env.PAYSTACK_GBP_TO_NGN_RATE);
+  if (usePaystack && !process.env.PAYSTACK_SECRET_KEY) return res.status(503).json({ error: 'Paystack is selected for this African delivery country. Configure PAYSTACK_SECRET_KEY on the server.' });
+  if (usePaystack && (!Number.isFinite(paystackRate) || paystackRate <= 0)) return res.status(503).json({ error: 'Configure PAYSTACK_GBP_TO_NGN_RATE with the current NGN value of £1 before accepting Paystack payments.' });
+  if (!usePaystack && (!stripe || !stripePublishableKey)) return res.status(503).json({ error: 'Configure STRIPE_SECRET_KEY and STRIPE_PUBLISHABLE_KEY on the server before accepting payments.' });
   const quantities = new Map();
   for (const line of requested) {
     const id = String(line?.id || '').slice(0, 100);
@@ -421,6 +434,7 @@ app.post('/api/stripe/checkout-session', async (req, res) => {
     const items = [...quantities].map(([id, qty]) => {
       const product = byId.get(id);
       if (!product || !Number.isFinite(Number(product.price)) || Number(product.price) < 0) throw new Error(`Product ${id} is unavailable.`);
+      if (Array.isArray(product.availableCountries) && product.availableCountries.length && !product.availableCountries.includes(address.country)) throw new Error(`${product.name} is not available for delivery to the selected country.`);
       return { id, name: String(product.name || 'PennyBuys product').slice(0, 200), image: product.image || '', price: Number(product.price), qty, weightKg: Math.max(0.01, Number(product.weightKg) || 0.5), freeDelivery: product.freeDelivery === true };
     });
     const subtotal = items.reduce((sum, item) => sum + item.price * item.qty, 0);
@@ -446,11 +460,23 @@ app.post('/api/stripe/checkout-session', async (req, res) => {
     const accessKey = crypto.randomBytes(32).toString('base64url');
     const now = new Date();
     const countryName = new Intl.DisplayNames(['en-GB'], { type: 'region' }).of(address.country);
-    const order = { id, createdAt: now, status: 'pending_payment', paymentStatus: 'pending', trackingNumber: '', customer: { name, email, phone }, address: { ...address, country: countryName, countryCode: address.country }, paymentMethod: 'Stripe', items, subtotal, discount, offerId: acceptedOffer?.offerId || '', offerTitle: acceptedOffer?.title || '', delivery, deliveryWeightKg: allWeight, chargeableDeliveryWeightKg: chargeableWeight, total: Math.max(0, subtotal - discount) + delivery, history: [], accessKeyHash: crypto.createHash('sha256').update(accessKey).digest('hex') };
+    const total = Math.max(0, subtotal - discount) + delivery;
+    const paystackAmount = usePaystack ? Math.round(total * paystackRate * 100) : 0;
+    const order = { id, createdAt: now, status: 'pending_payment', paymentStatus: 'pending', trackingNumber: '', customer: { name, email, phone }, address: { ...address, country: countryName, countryCode: address.country }, paymentMethod: usePaystack ? 'Paystack' : 'Stripe', ...(usePaystack ? { paystackReference: id, paystackCurrency: 'NGN', paystackAmount } : {}), items, subtotal, discount, offerId: acceptedOffer?.offerId || '', offerTitle: acceptedOffer?.title || '', delivery, deliveryWeightKg: allWeight, chargeableDeliveryWeightKg: chargeableWeight, total, history: [], accessKeyHash: crypto.createHash('sha256').update(accessKey).digest('hex') };
     const orders = await getStoreCollection('orders');
     if (!orders) return res.status(503).json({ error: 'Order checkout needs a MongoDB connection.' });
     await orders.insertOne(order);
     try {
+      if (usePaystack) {
+        const baseUrl = String(process.env.PUBLIC_BASE_URL || 'https://pennybuys.co.uk').replace(/\/$/, '');
+        const callback = new URL('/api/paystack/return', baseUrl);
+        callback.searchParams.set('order', id);
+        callback.searchParams.set('key', accessKey);
+        const response = await fetch('https://api.paystack.co/transaction/initialize', { method: 'POST', headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email, amount: paystackAmount, currency: 'NGN', reference: id, callback_url: callback.toString(), metadata: { order_id: id, customer_name: name } }) });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result.status || !result.data?.authorization_url) throw new Error(`Paystack: ${result.message || 'could not start this payment.'}`);
+        return res.json({ payment_url: result.data.authorization_url, payment_provider: 'Paystack' });
+      }
       const lineItems = [...discountedProducts];
       if (delivery > 0) lineItems.push({ quantity: 1, price_data: { currency: 'gbp', unit_amount: Math.round(delivery * 100), tax_behavior: stripeTaxBehavior, product_data: { name: 'Delivery' } } });
       const checkoutSession = await stripe.checkout.sessions.create({
@@ -463,22 +489,48 @@ app.post('/api/stripe/checkout-session', async (req, res) => {
         return_url: `${baseUrl}/order.html?id=${encodeURIComponent(id)}&key=${encodeURIComponent(accessKey)}&paid=1&session_id={CHECKOUT_SESSION_ID}`
       });
       await orders.updateOne({ id }, { $set: { stripeSessionId: checkoutSession.id } });
-      res.json({ client_secret: checkoutSession.client_secret, publishable_key: stripePublishableKey, order_url: `${baseUrl}/order.html?id=${encodeURIComponent(id)}&key=${encodeURIComponent(accessKey)}&paid=1` });
+      res.json({ client_secret: checkoutSession.client_secret, publishable_key: stripePublishableKey, order_url: `${baseUrl}/order.html?id=${encodeURIComponent(id)}&key=${encodeURIComponent(accessKey)}&paid=1`, payment_provider: 'Stripe' });
     } catch (error) { await orders.deleteOne({ id, paymentStatus: 'pending' }); throw error; }
-  } catch (error) { console.error('Stripe checkout session failed:', error.message); res.status(503).json({ error: error.message.startsWith('Product ') ? error.message : 'Secure checkout could not be started. Please try again.' }); }
+  } catch (error) { console.error('Checkout session failed:', error.message); const message = error.message.startsWith('Product ') || error.message.includes('not available for delivery') || error.message.startsWith('Paystack:') ? error.message : 'Secure checkout could not be started. Please try again.'; res.status(503).json({ error: message }); }
+});
+
+app.get('/api/paystack/return', async (req, res) => {
+  const id = String(req.query.order || '');
+  const key = String(req.query.key || '');
+  const baseUrl = String(process.env.PUBLIC_BASE_URL || 'https://pennybuys.co.uk').replace(/\/$/, '');
+  try {
+    const orders = await getStoreCollection('orders');
+    const keyHash = crypto.createHash('sha256').update(key).digest('hex');
+    const order = await orders?.findOne({ id, accessKeyHash: keyHash, paymentMethod: 'Paystack' });
+    if (!order) return res.redirect(303, `${baseUrl}/order.html`);
+    const reference = String(req.query.reference || '');
+    const verifyResponse = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` } });
+    const verification = await verifyResponse.json().catch(() => ({}));
+    if (verifyResponse.ok && verification.status && verification.data?.status === 'success' && reference === order.paystackReference && String(verification.data.currency).toUpperCase() === order.paystackCurrency && Number(verification.data.amount) === Number(order.paystackAmount)) {
+      const now = new Date();
+      const paid = await orders.updateOne({ id, paymentStatus: { $ne: 'paid' } }, { $set: { status: 'processing', paymentStatus: 'paid', paymentMethod: 'Paystack', paidCurrency: order.paystackCurrency, paidAmount: Number(verification.data.amount) / 100, history: [...(order.history || []), { status: 'processing', at: now }], paidAt: now, updatedAt: now } });
+      if (paid.modifiedCount) {
+        if (order.offerId) await client.db(mongoDbName).collection('storeCommercials').updateOne({ type: 'customer-offer', email: order.customer.email, offerId: order.offerId, status: 'accepted' }, { $set: { status: 'redeemed', redeemedAt: now } });
+        void dispatchPush({ audience: 'admin' }, { title: 'Paid PennyBuys order', body: `${order.customer.name} paid for ${order.id}.`, url: '/admin-order-management.html', tag: `order-${order.id}` });
+        void dispatchPush({ email: order.customer.email }, { title: 'Order received', body: `Order ${order.id} is now being processed.`, url: `/order.html?id=${encodeURIComponent(order.id)}`, tag: `order-${order.id}` });
+      }
+      return res.redirect(303, `${baseUrl}/order.html?id=${encodeURIComponent(id)}&key=${encodeURIComponent(key)}&paid=1`);
+    }
+    res.redirect(303, `${baseUrl}/order.html?id=${encodeURIComponent(id)}&key=${encodeURIComponent(key)}&payment=pending`);
+  } catch (error) { console.error('Paystack return verification failed:', error.message); res.redirect(303, `${baseUrl}/order.html?id=${encodeURIComponent(id)}&key=${encodeURIComponent(key)}&payment=pending`); }
 });
 
 app.post('/api/orders/lookup', async (req, res) => {
   const id = String(req.body?.id || '').trim(); const email = String(req.body?.email || '').trim().toLowerCase();
   if (!id || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Enter your order number and checkout email.' });
-  try { const collection = await getStoreCollection('orders'); const order = await collection?.findOne({ id, 'customer.email': email }, { projection: { _id: 0, accessKeyHash: 0, stripeSessionId: 0, stripePaymentIntent: 0, stripeUrl: 0, offerId: 0 } }); if (!order) return res.status(404).json({ error: 'We could not find an order with those details.' }); res.json({ order }); }
+  try { const collection = await getStoreCollection('orders'); const order = await collection?.findOne({ id, 'customer.email': email }, { projection: { _id: 0, accessKeyHash: 0, stripeSessionId: 0, stripePaymentIntent: 0, stripeUrl: 0, paystackAccessCode: 0, offerId: 0 } }); if (!order) return res.status(404).json({ error: 'We could not find an order with those details.' }); res.json({ order }); }
   catch (error) { console.error('Order lookup failed:', error.message); res.status(503).json({ error: 'Order tracking is temporarily unavailable.' }); }
 });
 
 app.get('/api/orders/:id', async (req, res) => {
   const key = String(req.query.key || '');
   if (key.length < 32) return res.status(401).json({ error: 'Use the private order link or enter your order number and email.' });
-  try { const collection = await getStoreCollection('orders'); const accessKeyHash = crypto.createHash('sha256').update(key).digest('hex'); const order = await collection?.findOne({ id: req.params.id, accessKeyHash }, { projection: { _id: 0, accessKeyHash: 0, stripeSessionId: 0, stripePaymentIntent: 0, stripeUrl: 0, offerId: 0 } }); if (!order) return res.status(404).json({ error: 'This private order link is not valid.' }); res.set('Cache-Control', 'no-store').json({ order }); }
+  try { const collection = await getStoreCollection('orders'); const accessKeyHash = crypto.createHash('sha256').update(key).digest('hex'); const order = await collection?.findOne({ id: req.params.id, accessKeyHash }, { projection: { _id: 0, accessKeyHash: 0, stripeSessionId: 0, stripePaymentIntent: 0, stripeUrl: 0, paystackAccessCode: 0, offerId: 0 } }); if (!order) return res.status(404).json({ error: 'This private order link is not valid.' }); res.set('Cache-Control', 'no-store').json({ order }); }
   catch (error) { console.error('Private order tracking failed:', error.message); res.status(503).json({ error: 'Order tracking is temporarily unavailable.' }); }
 });
 
@@ -642,16 +694,16 @@ app.get('/products-data.js', async (_req, res) => {
     const products = await getStoreProducts();
     res.type('js').set('Cache-Control', 'no-store').send(`window.STORE_PRODUCTS = ${JSON.stringify(products)};`);
   } catch (error) {
-    console.warn('MongoDB unavailable; serving demo catalog:', error.message);
-    res.type('js').set('Cache-Control', 'no-store').send(`window.STORE_PRODUCTS = ${JSON.stringify(withDefaultReviewStats(getDemoProducts()))};`);
+    console.warn('MongoDB unavailable; storefront catalog is empty:', error.message);
+    res.type('js').set('Cache-Control', 'no-store').send('window.STORE_PRODUCTS = [];');
   }
 });
 
 app.get('/api/products', async (_req, res) => {
   try { res.json(await getStoreProducts()); }
   catch (error) {
-    console.warn('MongoDB unavailable; serving demo catalog:', error.message);
-    res.set('X-Catalog-Source', 'demo').json(withDefaultReviewStats(getDemoProducts()));
+    console.warn('MongoDB unavailable; admin catalog could not load:', error.message);
+    res.status(503).json({ error: 'MongoDB is unavailable. Check MONGODB_URI and the database connection.' });
   }
 });
 
@@ -804,6 +856,9 @@ app.post('/api/products', requireAdmin, upload.fields([{ name: 'images', maxCoun
   const inventory = Number(req.body.inventory);
   const weightKg = Number(req.body.weightKg);
   const freeDelivery = req.body.freeDelivery === 'true';
+  let availableCountries;
+  try { availableCountries = normalizeAvailableCountries(req.body); }
+  catch (error) { return res.status(400).json({ error: error.message }); }
   const images = req.files?.images || [];
   const video = req.files?.video?.[0];
 
@@ -835,7 +890,7 @@ app.post('/api/products', requireAdmin, upload.fields([{ name: 'images', maxCoun
     const id = existing.some(item => item.id === baseId) ? `${baseId}-${Date.now().toString(36)}` : baseId;
     const now = new Date();
     const product = {
-      id, name, category, group, price, weightKg, freeDelivery,
+      id, name, category, group, price, weightKg, freeDelivery, availableCountries,
       oldPrice: null,
       badge: 'JUST ARRIVED', rating: '5.0', reviews: 0,
       image: imageAssets[0].secure_url,
@@ -867,6 +922,9 @@ app.put('/api/products/:id', requireAdmin, upload.fields([{ name: 'images', maxC
   const inventory = Number(req.body.inventory);
   const weightKg = Number(req.body.weightKg);
   const freeDelivery = req.body.freeDelivery === 'true';
+  let availableCountries;
+  try { availableCountries = normalizeAvailableCountries(req.body); }
+  catch (error) { return res.status(400).json({ error: error.message }); }
   const images = req.files?.images || [];
   const video = req.files?.video?.[0];
   if (name.length < 2 || name.length > 140) return res.status(400).json({ error: 'Product name must be between 2 and 140 characters.' });
@@ -889,10 +947,10 @@ app.put('/api/products/:id', requireAdmin, upload.fields([{ name: 'images', maxC
   if (!collection) return res.status(503).json({ error: 'Set MONGODB_URI in .env or your Railway variables, then restart the server.' });
   try {
     const existingRecord = await collection.findOne({ id: req.params.id }, { projection: { _id: 0 } });
-    const previous = existingRecord || getDemoProducts().find(product => product.id === req.params.id);
+    const previous = existingRecord;
     if (!previous) return res.status(404).json({ error: 'Product not found.' });
     const now = new Date();
-    const changes = { name, category, group, description, deliveryReturns, price, inventory, weightKg, freeDelivery, alt: name, updatedAt: now };
+    const changes = { name, category, group, description, deliveryReturns, price, inventory, weightKg, freeDelivery, availableCountries, alt: name, updatedAt: now };
     let oldImageIds = [];
     let oldVideoIds = [];
     let imagePlan;
@@ -939,7 +997,6 @@ app.put('/api/products/:id', requireAdmin, upload.fields([{ name: 'images', maxC
       changes.cloudinaryVideoId = '';
     }
     await collection.updateOne({ id: req.params.id }, { $set: { ...previous, ...changes } }, { upsert: true });
-    await client.db(mongoDbName).collection('catalogOverrides').deleteOne({ id: req.params.id, type: 'deleted-demo-product' });
     await Promise.all([destroyProductAssets(oldImageIds, 'image'), destroyProductAssets(oldVideoIds, 'video')]);
     const product = await collection.findOne({ id: req.params.id }, { projection: { _id: 0 } });
     res.json({ product, products: await getStoreProducts() });
@@ -958,12 +1015,9 @@ app.delete('/api/products/:id', requireAdmin, async (req, res) => {
   }
   if (!collection) return res.status(503).json({ error: 'Set MONGODB_URI in .env or your Railway variables, then restart the server.' });
   try {
-    const product = await collection.findOne({ id: req.params.id }, { projection: { _id: 0 } }) || getDemoProducts().find(item => item.id === req.params.id);
+    const product = await collection.findOne({ id: req.params.id }, { projection: { _id: 0 } });
     if (!product) return res.status(404).json({ error: 'Product not found.' });
     await collection.deleteOne({ id: req.params.id });
-    if (getDemoProducts().some(item => item.id === req.params.id)) {
-      await client.db(mongoDbName).collection('catalogOverrides').updateOne({ id: req.params.id, type: 'deleted-demo-product' }, { $setOnInsert: { id: req.params.id, type: 'deleted-demo-product', deletedAt: new Date() } }, { upsert: true });
-    }
     await Promise.all([destroyProductAssets(productAssetIds(product, 'image'), 'image'), destroyProductAssets(productAssetIds(product, 'video'), 'video')]);
     res.json({ products: await getStoreProducts() });
   } catch (error) {

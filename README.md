@@ -1,12 +1,12 @@
 # PennyBuys storefront
 
-A responsive, UK focused ecommerce storefront prototype. The product catalog uses demo items and photography while the store is being built.
+A responsive, UK focused ecommerce storefront. Product listings are loaded from MongoDB; the repository does not seed or display bundled sample products.
 
 The landing page now follows a marketplace style inspired by eBay: a compact utility row, prominent category-aware search, a separate category navigation row, and denser product discovery. Its CSS requests eBay's `Market Sans` family with Arial as the fallback; the proprietary Market Sans font file is not bundled.
 
 The compact hero promotes four product edits and advances every five seconds. Visitors can use the arrows or slide dots, pause or resume rotation, and the carousel pauses while hovered or focused.
 
-Category navigation and product searches open `catalog.html` with URL parameters. The catalog page filters the shared demo product data by category or related search terms, offers price/rating sorting, and shares the demo shopping bag with the landing page.
+Category navigation and product searches open `catalog.html` with URL parameters. The catalog filters MongoDB products by category, search terms and the visitor's detected country, and shares the shopping bag across pages.
 
 ## Run locally
 
@@ -31,7 +31,7 @@ Configure these environment variables locally in `.env` or in Railway's service 
 - `PORT` is provided by Railway; local default is `3000`.
 - `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` are server-only. `STRIPE_PUBLISHABLE_KEY` is safe to return to the browser. Set `STRIPE_TAX_BEHAVIOR` to `inclusive` (default) or `exclusive`, and `PUBLIC_BASE_URL` to the public HTTPS site URL.
 
-The first MongoDB connection seeds the collection with the current demo products when it is empty. The storefront's `/products-data.js` endpoint then serves current MongoDB products to the home, catalog, product and checkout pages. If MongoDB is unconfigured or temporarily unreachable, the storefront and admin inventory list fall back to the bundled demo data; adding products still requires a working database. Replace `MONGODB_URI` in your local `.env` with the real URI from MongoDB Atlas. Keep `.env` and all API secrets out of source control; `.env.example` contains placeholders only.
+Products are only loaded from MongoDB. If MongoDB is unconfigured or unavailable, product listings are empty and admin inventory reports the connection issue. Admins can make a product available worldwide or select its destination countries. When location detection fails, the storefront shows all products. Replace `MONGODB_URI` in your local `.env` with the real URI from MongoDB Atlas. Keep `.env` and all API secrets out of source control; `.env.example` contains placeholders only.
 
 ## Deploy on Railway
 
@@ -39,19 +39,19 @@ Create a Railway service from this repository. Railway can use the included `npm
 
 For Railway's optional deployment health check, use `/health`. In service Networking settings, make sure the public domain's target port matches the port shown in the deployment log.
 
-## Current demo behavior
+## Store behavior
 
-- Product search and category tabs filter the MongoDB catalog (or bundled sample products when MongoDB is not configured).
+- Product search and category tabs filter the MongoDB catalog by category, search terms and detected country.
 - Product cards open a detail page with descriptions, highlights, care, delivery and returns information.
 - Favourites are visual only and are not saved.
 - The shopping bag is saved in the current browser using local storage.
 - Customer accounts are stored in MongoDB; passwords are stored as salted hashes, and sign-in uses a protected session cookie.
 - Newsletter subscriptions are saved in MongoDB and can be viewed in the admin Subscribers section.
-- Checkout embeds Stripe's Checkout Form. Product prices, accepted offers, delivery fees and order contents are recalculated on the server; card details stay in Stripe's iframe. Automatic Tax is disabled by the current Checkout Studio settings, and signed Stripe webhook confirmation is required before an order changes to processing.
+- Checkout uses Paystack for African delivery countries and Stripe for other countries. Paystack requires `PAYSTACK_SECRET_KEY` and `PAYSTACK_GBP_TO_NGN_RATE` (the current NGN value of GBP 1); Stripe uses its server and publishable keys. Order contents, product country availability, offers and delivery fees are checked on the server, and signed provider confirmation is required before an order changes to processing.
 - Customers can look up an order using its number and checkout email. Staff can use the Orders section in `admin-products.html` to change status and add the tracking number shown to the customer once the order is on the way. `admin-orders.html` redirects to that section.
 - Order statuses are: Order is being processed, Packed and ready for delivery, On the way for delivery, and Delivered.
 - Pending and paid order records and delivery status changes are stored in MongoDB so they can be managed across devices.
-- Existing demo product photography is loaded from Unsplash. New admin uploads are stored in Cloudinary and appear in the storefront catalog.
+- Product images and videos uploaded by admins are stored in Cloudinary and product records in MongoDB.
 
 Basket contents remain in browser storage, while customer accounts and order records are stored in MongoDB. The product admin is protected by a shared server-side token; replace it with full user and role management before opening the admin to multiple staff members. Keep payment credentials and Cloudinary secrets on the server, not in browser code.
 

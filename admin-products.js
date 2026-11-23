@@ -20,6 +20,9 @@ const existingMedia=document.querySelector('#existing-media');
 const removeVideoWrap=document.querySelector('#remove-video-wrap');
 const imageList=document.querySelector('#existing-image-list');
 const videoPreview=document.querySelector('#existing-video-preview');
+const availabilityMode=productForm.elements.availabilityMode;
+const availabilityCountries=productForm.elements.availableCountries;
+const availabilityCountriesWrap=document.querySelector('#availability-countries-wrap');
 let adminToken=sessionStorage.getItem(tokenKey)||'';
 let catalogProducts=[];
 let editingId='';
@@ -27,6 +30,12 @@ let mediaItems=[];
 let currentVideoUrl='';
 let serviceStatusTimer;
 const escapeHTML=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+
+if(availabilityCountries&&Array.isArray(window.PENNYBUYS_COUNTRY_CODES)){
+  const displayName=new Intl.DisplayNames(['en-GB'],{type:'region'});
+  [...new Set([...window.PENNYBUYS_COUNTRY_CODES,'GB'])].map(code=>({code,name:displayName.of(code)})).filter(country=>country.name).sort((a,b)=>a.name.localeCompare(b.name,'en-GB')).forEach(country=>availabilityCountries.add(new Option(country.name,country.code)));
+  availabilityMode.addEventListener('change',()=>{availabilityCountriesWrap.hidden=availabilityMode.value!=='selected'});
+}
 
 function showLogin(message=''){
   loginPanel.hidden=false;dashboard.hidden=true;document.querySelector('#admin-logout').hidden=true;
@@ -41,7 +50,6 @@ async function api(path,options={}){
   const response=await fetch(path,{...options,headers:{...(options.headers||{}),'x-admin-token':adminToken}});
   const data=await response.json().catch(()=>({}));
   if(!response.ok)throw new Error(data.error||`Request failed (${response.status})`);
-  if(path==='/api/products'&&response.headers.get('X-Catalog-Source')==='demo')throw new Error('MongoDB is unreachable. The products shown in the storefront are demo fallback data, so edits and deletes cannot be saved. Check MONGODB_URI and the Railway MongoDB connection.');
   return data;
 }
 function renderProducts(products){
@@ -114,6 +122,7 @@ async function connectAdmin(candidate){
 }
 function cancelEdit(){
   editingId='';productForm.reset();productForm.elements.group.value='';
+  availabilityCountriesWrap.hidden=true;
   productForm.dataset.editId='';imageInput.required=false;removeVideoWrap.hidden=true;existingMedia.hidden=true;
   mediaItems=[];currentVideoUrl='';imageList.replaceChildren();videoPreview.replaceChildren();
   document.querySelector('#form-title').textContent='Add a product';
@@ -132,6 +141,10 @@ function editProduct(product){
   productForm.elements.freeDelivery.checked=product.freeDelivery===true;
   productForm.elements.description.value=product.description||'';
   productForm.elements.deliveryReturns.value=product.deliveryReturns||'';
+  const selectedCountries=Array.isArray(product.availableCountries)?product.availableCountries:[];
+  availabilityMode.value=selectedCountries.length?'selected':'all';
+  availabilityCountriesWrap.hidden=!selectedCountries.length;
+  [...availabilityCountries.options].forEach(option=>{option.selected=selectedCountries.includes(option.value)});
   const categorySelect=productForm.elements.category;
   let option=[...categorySelect.options].find(item=>item.value===product.category);
   if(!option){option=new Option(product.category,product.category);option.dataset.group=product.group||'';categorySelect.add(option)}

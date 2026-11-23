@@ -15,6 +15,9 @@
   const rateKey = 'pennybuys-gbp-rates-v1';
   const whatsappNumber = '2348031421214';
   let settings = read(preferenceKey, { country: 'GB', mode: 'auto' });
+  let detectedCountry = read('pennybuys-detected-country-v1', '');
+  const allProducts = window.PennyBuysAllProducts || (Array.isArray(window.STORE_PRODUCTS) ? [...window.STORE_PRODUCTS] : []);
+  window.PennyBuysAllProducts = allProducts;
   let rates = { GBP: 1 };
   let ratesReady = false;
 
@@ -25,8 +28,16 @@
     try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* Storage can be disabled by the browser. */ }
   }
   function emitChange() {
+    applyAvailabilityFilter();
     window.dispatchEvent(new CustomEvent('pennybuys:currencychange', { detail: { ...settings } }));
     updateCurrencyNote();
+  }
+  function applyAvailabilityFilter() {
+    const country = settings.mode === 'manual' ? settings.country : detectedCountry;
+    window.PennyBuysLocation = { country: country || '', detected: Boolean(country) };
+    const products = country ? allProducts.filter(product => !Array.isArray(product.availableCountries) || !product.availableCountries.length || product.availableCountries.includes(country)) : allProducts;
+    if (Array.isArray(window.STORE_PRODUCTS)) window.STORE_PRODUCTS.splice(0, window.STORE_PRODUCTS.length, ...products);
+    window.dispatchEvent(new CustomEvent('pennybuys:productavailabilitychange', { detail: { country: country || '', products } }));
   }
   function format(gbpValue) {
     const country = countries[settings.country] || countries.GB;
@@ -65,6 +76,8 @@
     select.value = countries[settings.country] ? settings.country : 'GB';
     select.addEventListener('change', () => {
       settings = { country: select.value, mode: 'manual' };
+      detectedCountry = select.value;
+      write('pennybuys-detected-country-v1', detectedCountry);
       write(preferenceKey, settings);
       emitChange();
     });
@@ -264,7 +277,7 @@
     dialog.id = 'location-preferences';
     dialog.className = 'location-dialog';
     dialog.setAttribute('aria-labelledby', 'location-title');
-    dialog.innerHTML = `<button type="button" class="location-dialog-close" aria-label="Close location settings">×</button><span class="location-dialog-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg></span><p class="eyebrow">COUNTRY &amp; CURRENCY</p><h2 id="location-title">Use your approximate location?</h2><p class="location-dialog-copy">If you choose this, we’ll check your country from your IP address and suggest the matching currency. Your precise location is not saved. You can also choose a country manually from the selector.</p><p id="location-status" class="location-status"></p><div class="location-dialog-actions"><button type="button" class="location-dialog-cancel">Keep my current choice</button><button type="button" class="location-dialog-use">Use my location</button><button type="button" class="location-dialog-disable" hidden>Turn off automatic location</button></div>`;
+    dialog.innerHTML = `<button type="button" class="location-dialog-close" aria-label="Close location settings">×</button><span class="location-dialog-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg></span><p class="eyebrow">COUNTRY &amp; CURRENCY</p><h2 id="location-title">Your approximate location</h2><p class="location-dialog-copy">We use your IP address to detect your country and show products available there. We do not save your precise location. You can choose a country manually or turn off automatic detection.</p><p id="location-status" class="location-status"></p><div class="location-dialog-actions"><button type="button" class="location-dialog-cancel">Keep my current choice</button><button type="button" class="location-dialog-use">Detect again</button><button type="button" class="location-dialog-disable" hidden>Turn off automatic location</button></div>`;
     document.body.append(dialog);
     const useButton = dialog.querySelector('.location-dialog-use');
     const disableButton = dialog.querySelector('.location-dialog-disable');
@@ -287,7 +300,7 @@
     disableButton.addEventListener('click', () => {
       write(locationConsentKey, { location: false, savedAt: new Date().toISOString() });
       dialog.close();
-      if (settings.mode !== 'manual') setCountry('GB', 'auto');
+      if (settings.mode !== 'manual') setCountry('GB', 'auto', '');
     });
     dialog.querySelector('.location-dialog-close').addEventListener('click', () => dialog.close());
     dialog.querySelector('.location-dialog-cancel').addEventListener('click', () => dialog.close());
@@ -296,8 +309,10 @@
     window.openPennyBuysLocation = openLocationDialog;
   }
 
-  function setCountry(country, mode) {
+  function setCountry(country, mode, resolvedCountry = country) {
     settings = { country: countries[country] ? country : 'GB', mode };
+    detectedCountry = typeof resolvedCountry === 'string' && /^[A-Z]{2}$/.test(resolvedCountry) ? resolvedCountry : '';
+    write('pennybuys-detected-country-v1', detectedCountry);
     write(preferenceKey, settings);
     const select = document.querySelector('.currency-picker select');
     if (select) select.value = settings.country;
@@ -306,18 +321,20 @@
   async function suggestCountry() {
     const saved = read('pennybuys-location-suggestion-v1', null);
     if (saved && Date.now() - saved.checkedAt < 24 * 60 * 60 * 1000) {
-      if (settings.mode !== 'manual') setCountry(saved.country, 'auto');
+      if (settings.mode !== 'manual') setCountry(saved.currencyCountry || saved.country, 'auto', saved.detectedCountry || saved.country);
       return;
     }
     try {
       const response = await fetch('https://ipapi.co/json/', { headers: { Accept: 'application/json' }, cache: 'no-store' });
       if (!response.ok) throw new Error('Location lookup failed');
       const result = await response.json();
-      const country = countries[result.country_code] ? result.country_code : 'GB';
-      write('pennybuys-location-suggestion-v1', { country, checkedAt: Date.now() });
-      if (settings.mode !== 'manual') setCountry(country, 'auto');
+      const detected = String(result.country_code || '').toUpperCase();
+      if (!/^[A-Z]{2}$/.test(detected)) throw new Error('Country unavailable');
+      const currencyCountry = countries[detected] ? detected : 'GB';
+      write('pennybuys-location-suggestion-v1', { country: currencyCountry, currencyCountry, detectedCountry: detected, checkedAt: Date.now() });
+      if (settings.mode !== 'manual') setCountry(currencyCountry, 'auto', detected);
     } catch {
-      if (settings.mode !== 'manual') setCountry('GB', 'auto');
+      if (settings.mode !== 'manual') setCountry('GB', 'auto', '');
     }
   }
   async function loadRates() {
@@ -375,9 +392,9 @@
   makeCookieBanner();
   updateCurrencyNote();
   const consent = read(locationConsentKey, null);
-  if (consent?.location && settings.mode !== 'manual') suggestCountry();
-  else if (settings.mode !== 'manual') setCountry('GB', 'auto');
-  if (!countries[settings.country]) setCountry('GB', 'auto');
+  if (consent?.location === false && settings.mode !== 'manual') setCountry('GB', 'auto', '');
+  else if (settings.mode !== 'manual') suggestCountry();
+  if (!countries[settings.country]) setCountry('GB', 'auto', '');
   emitChange();
   loadRates();
 })();

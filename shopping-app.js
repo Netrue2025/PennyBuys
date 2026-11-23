@@ -128,6 +128,7 @@
     if (button) addToBag(button.dataset.appAdd, button);
   });
   window.addEventListener('storage', event => { if (event.key === bagKey) updateBagCount(); });
+  window.addEventListener('pennybuys:currencychange', () => { renderCategories(); renderProducts(); });
   renderCategories();
   renderProducts();
   updateBagCount();

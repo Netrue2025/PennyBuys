@@ -65,10 +65,10 @@ else{
   document.querySelector('#detail-full-description').textContent=productDescription;
   document.querySelector('#detail-highlights').innerHTML=details.points.map(point=>`<li>${point}</li>`).join('');
   document.querySelector('#detail-care').textContent=details.care;
-  const related=products.filter(item=>item.id!==product.id&&(item.group===product.group||item.category===product.category)).slice(0,4);
-  const renderRelated=()=>{document.querySelector('#related-grid').innerHTML=related.map(item=>`<a class="related-card" href="product.html?id=${encodeURIComponent(item.id)}"><img src="${item.image}" alt="${item.alt}" loading="lazy"><span>${item.category}</span><b>${item.name}</b><strong>${money(item.price)}</strong></a>`).join('')};
+  const renderRelated=()=>{const related=products.filter(item=>item.id!==product.id&&(item.group===product.group||item.category===product.category)).slice(0,4);document.querySelector('#related-grid').innerHTML=related.map(item=>`<a class="related-card" href="product.html?id=${encodeURIComponent(item.id)}"><img src="${item.image}" alt="${item.alt}" loading="lazy"><span>${item.category}</span><b>${item.name}</b><strong>${money(item.price)}</strong></a>`).join('')};
   renderRelated();
   window.addEventListener('pennybuys:currencychange',()=>{document.querySelector('#detail-price').innerHTML=`${money(product.price)} ${product.oldPrice?`<del>${money(product.oldPrice)}</del>`:''}`;renderRelated()});
+  window.addEventListener('pennybuys:productavailabilitychange',event=>{const isAvailable=event.detail.products.some(item=>item.id===product.id);document.querySelector('#product-detail').hidden=!isAvailable;document.querySelector('.detail-information').hidden=!isAvailable;document.querySelector('.related-section').hidden=!isAvailable;document.querySelector('#product-missing').hidden=isAvailable;renderRelated()});
   const reviewList=document.querySelector('#product-reviews');
   const reviewMessage=document.querySelector('#review-message');
   const reviewDialog=document.querySelector('#review-dialog');
