@@ -19,7 +19,7 @@ const port = Number(process.env.PORT || 3000);
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2026-03-25.dahlia' }) : null;
 const stripePublishableKey = process.env.STRIPE_PUBLISHABLE_KEY || '';
 const stripeTaxBehavior = process.env.STRIPE_TAX_BEHAVIOR === 'exclusive' ? 'exclusive' : 'inclusive';
-const allowedDeliveryCountries = (process.env.STRIPE_ALLOWED_COUNTRIES || 'GB').split(',').map(country => country.trim().toUpperCase()).filter(country => /^[A-Z]{2}$/.test(country));
+const allowedDeliveryCountries = new Set(require('./country-codes.js'));
 const configuredMongoUri = (process.env.MONGODB_URI || '').trim();
 const mongoUri = configuredMongoUri && !/cluster\.example\.mongodb\.net|username:password@/i.test(configuredMongoUri) ? configuredMongoUri : '';
 const mongoDbName = process.env.MONGODB_DB_NAME || 'pennybuys';
@@ -406,7 +406,7 @@ app.post('/api/stripe/checkout-session', async (req, res) => {
   };
   const requested = Array.isArray(req.body?.items) ? req.body.items.slice(0, 50) : [];
   if (name.length < 2 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !requested.length) return res.status(400).json({ error: 'Enter valid contact details and add at least one product.' });
-  if (!address.line1 || !address.city || !address.postcode || !allowedDeliveryCountries.includes(address.country)) return res.status(400).json({ error: 'Enter a complete delivery address in a supported country.' });
+  if (!address.line1 || !address.city || !address.postcode || !allowedDeliveryCountries.has(address.country)) return res.status(400).json({ error: 'Enter a complete delivery address in a supported country.' });
   const quantities = new Map();
   for (const line of requested) {
     const id = String(line?.id || '').slice(0, 100);
@@ -445,7 +445,8 @@ app.post('/api/stripe/checkout-session', async (req, res) => {
     const id = `PB-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
     const accessKey = crypto.randomBytes(32).toString('base64url');
     const now = new Date();
-    const order = { id, createdAt: now, status: 'pending_payment', paymentStatus: 'pending', trackingNumber: '', customer: { name, email, phone }, address: { ...address, country: address.country === 'GB' ? 'United Kingdom' : address.country }, paymentMethod: 'Stripe', items, subtotal, discount, offerId: acceptedOffer?.offerId || '', offerTitle: acceptedOffer?.title || '', delivery, deliveryWeightKg: allWeight, chargeableDeliveryWeightKg: chargeableWeight, total: Math.max(0, subtotal - discount) + delivery, history: [], accessKeyHash: crypto.createHash('sha256').update(accessKey).digest('hex') };
+    const countryName = new Intl.DisplayNames(['en-GB'], { type: 'region' }).of(address.country);
+    const order = { id, createdAt: now, status: 'pending_payment', paymentStatus: 'pending', trackingNumber: '', customer: { name, email, phone }, address: { ...address, country: countryName, countryCode: address.country }, paymentMethod: 'Stripe', items, subtotal, discount, offerId: acceptedOffer?.offerId || '', offerTitle: acceptedOffer?.title || '', delivery, deliveryWeightKg: allWeight, chargeableDeliveryWeightKg: chargeableWeight, total: Math.max(0, subtotal - discount) + delivery, history: [], accessKeyHash: crypto.createHash('sha256').update(accessKey).digest('hex') };
     const orders = await getStoreCollection('orders');
     if (!orders) return res.status(503).json({ error: 'Order checkout needs a MongoDB connection.' });
     await orders.insertOne(order);

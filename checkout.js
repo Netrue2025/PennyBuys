@@ -1,4 +1,13 @@
 const products=window.STORE_PRODUCTS||[];
+const deliveryCountry=document.querySelector('#delivery-country');
+if(deliveryCountry&&Array.isArray(window.PENNYBUYS_COUNTRY_CODES)){
+  const displayName=new Intl.DisplayNames(['en-GB'],{type:'region'});
+  const countries=window.PENNYBUYS_COUNTRY_CODES.map(code=>({code,name:displayName.of(code)})).sort((a,b)=>a.name.localeCompare(b.name,'en-GB'));
+  const unitedKingdom=countries.find(country=>country.code==='GB');
+  const orderedCountries=[unitedKingdom,...countries.filter(country=>country.code!=='GB')];
+  deliveryCountry.replaceChildren(...orderedCountries.map(country=>{const option=document.createElement('option');option.value=country.code;option.textContent=country.name;return option}));
+  deliveryCountry.value='GB';
+}
 const bagKey='pennybuys-bag';
 const money=value=>window.PennyBuysCurrency?.format(value)||`£${Number(value).toFixed(2)}`;
 const escapeHTML=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
@@ -48,8 +57,8 @@ document.querySelector('#checkout-contact-form').addEventListener('submit',async
     if(!result.client_secret||!result.publishable_key||!result.order_url)throw new Error('Stripe Checkout is not configured. Add STRIPE_PUBLISHABLE_KEY to the server environment.');
     if(typeof Stripe!=='function')throw new Error('Stripe.js did not load. Refresh the page and try again.');
     const stripe=Stripe(result.publishable_key);
-    const appearance={theme:'stripe',labels:'auto',inputs:'spaced',variables:{borderRadius:'4px',colorBackground:'#ffffff',colorDanger:'#df1b41',colorPrimary:'#0570de',colorSuccess:'#00c853',colorText:'#30313d',fontFamily:'Roboto',fontSizeBase:'16px',spacingUnit:'4px'}};
-    const checkout=stripe.initCheckoutFormSdk({clientSecret:Promise.resolve(result.client_secret),appearance});
+    const appearance={theme:'stripe',labels:'auto',inputs:'spaced',variables:{borderRadius:'4px',colorBackground:'#ffffff',colorDanger:'#df1b41',colorPrimary:'#0570de',colorSuccess:'#00c853',colorText:'#30313d',fontFamily:'Roboto, sans-serif',fontSizeBase:'16px',spacingUnit:'4px'}};
+    const checkout=stripe.initCheckoutFormSdk({clientSecret:Promise.resolve(result.client_secret),appearance,fonts:[{cssSrc:'https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap'}]});
     const form=checkout.createForm({layout:'expanded'});
     document.querySelector('#checkout-contact-form').hidden=true;
     const panel=document.querySelector('#stripe-payment-panel');panel.hidden=false;

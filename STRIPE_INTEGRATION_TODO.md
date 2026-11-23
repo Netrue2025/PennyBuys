@@ -31,11 +31,12 @@ These Checkout Studio parameters are already configured in the integration.
 | Parameter | Value |
 |-----------|-------|
 | `ui_mode` | `form` |
+| Contact, billing, and shipping collection | Disabled in the Stripe Session; PennyBuys collects order details locally |
 | `automatic_tax.enabled` | `false` |
 | `submit_type` | `auto` |
 | `integration_identifier` | `custom_embedded_web_0001` |
 
-`payment_method_collection` is omitted because this is a one-time `payment` Session; Stripe only accepts that parameter in `subscription` mode. PennyBuys collects contact and UK delivery details locally and stores them on the pending order. The Checkout Session receives no customer, phone, billing-address, or shipping-address fields. PennyBuys keeps those details on the pending order in MongoDB. Stripe handles only payment details, except for any billing fields required by the selected payment method. A `return_url` is configured for redirect-based payment methods.
+`payment_method_collection` is omitted because this is a one-time `payment` Session; Stripe only accepts that parameter in `subscription` mode. PennyBuys collects contact and delivery details locally and stores them on the pending order. The Checkout Session receives no customer, phone, billing-address, or shipping-address fields. PennyBuys keeps those details on the pending order in MongoDB. The country menu lists ISO country and territory codes, with the United Kingdom selected by default. The Stripe form uses Roboto via its font stylesheet and Appearance API. Stripe handles payment details; a payment method can still require billing fields. A `return_url` is configured for redirect-based payment methods.
 
 ## Setup and Next Steps
 
