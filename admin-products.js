@@ -31,7 +31,7 @@ let currentVideoUrl='';
 let serviceStatusTimer;
 const escapeHTML=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 
-if(availabilityCountries&&Array.isArray(window.PENNYBUYS_COUNTRY_CODES)){
+if(availabilityCountries&&availabilityMode&&availabilityCountriesWrap&&Array.isArray(window.PENNYBUYS_COUNTRY_CODES)){
   const displayName=new Intl.DisplayNames(['en-GB'],{type:'region'});
   [...new Set([...window.PENNYBUYS_COUNTRY_CODES,'GB'])].map(code=>({code,name:displayName.of(code)})).filter(country=>country.name).sort((a,b)=>a.name.localeCompare(b.name,'en-GB')).forEach(country=>availabilityCountries.add(new Option(country.name,country.code)));
   availabilityMode.addEventListener('change',()=>{availabilityCountriesWrap.hidden=availabilityMode.value!=='selected'});
@@ -122,7 +122,7 @@ async function connectAdmin(candidate){
 }
 function cancelEdit(){
   editingId='';productForm.reset();productForm.elements.group.value='';
-  availabilityCountriesWrap.hidden=true;
+  if(availabilityCountriesWrap)availabilityCountriesWrap.hidden=true;
   productForm.dataset.editId='';imageInput.required=false;removeVideoWrap.hidden=true;existingMedia.hidden=true;
   mediaItems=[];currentVideoUrl='';imageList.replaceChildren();videoPreview.replaceChildren();
   document.querySelector('#form-title').textContent='Add a product';
@@ -142,9 +142,9 @@ function editProduct(product){
   productForm.elements.description.value=product.description||'';
   productForm.elements.deliveryReturns.value=product.deliveryReturns||'';
   const selectedCountries=Array.isArray(product.availableCountries)?product.availableCountries:[];
-  availabilityMode.value=selectedCountries.length?'selected':'all';
-  availabilityCountriesWrap.hidden=!selectedCountries.length;
-  [...availabilityCountries.options].forEach(option=>{option.selected=selectedCountries.includes(option.value)});
+  if(availabilityMode)availabilityMode.value=selectedCountries.length?'selected':'all';
+  if(availabilityCountriesWrap)availabilityCountriesWrap.hidden=!selectedCountries.length;
+  if(availabilityCountries)[...availabilityCountries.options].forEach(option=>{option.selected=selectedCountries.includes(option.value)});
   const categorySelect=productForm.elements.category;
   let option=[...categorySelect.options].find(item=>item.value===product.category);
   if(!option){option=new Option(product.category,product.category);option.dataset.group=product.group||'';categorySelect.add(option)}
@@ -220,7 +220,7 @@ const deleteDialog=document.querySelector('#delete-product-dialog');
 const confirmDeleteButton=document.querySelector('#confirm-delete-product');
 productList.addEventListener('click',async event=>{
   const editButton=event.target.closest('[data-edit-id]');
-  if(editButton){const product=catalogProducts.find(item=>item.id===editButton.dataset.editId);if(product)editProduct(product);return;}
+  if(editButton){const product=catalogProducts.find(item=>item.id===editButton.dataset.editId);if(!product){productMessage.textContent='This product is no longer in the loaded list. Refresh products and try again.';return;}try{editProduct(product)}catch(error){productMessage.textContent=`The product editor could not open: ${error.message}`;}return;}
   const deleteButton=event.target.closest('[data-delete-id]');
   if(!deleteButton)return;
   const product=catalogProducts.find(item=>item.id===deleteButton.dataset.deleteId);
