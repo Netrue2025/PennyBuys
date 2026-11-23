@@ -3,7 +3,7 @@ const deliveryCountry=document.querySelector('#delivery-country');
 if(deliveryCountry&&Array.isArray(window.PENNYBUYS_COUNTRY_CODES)){
   try{
     const displayName=new Intl.DisplayNames(['en-GB'],{type:'region'});
-    const countries=window.PENNYBUYS_COUNTRY_CODES.map(code=>({code,name:displayName.of(code)})).filter(country=>country.name).sort((a,b)=>a.name.localeCompare(b.name,'en-GB'));
+    const countries=[...new Set([...window.PENNYBUYS_COUNTRY_CODES,'GB'])].map(code=>({code,name:displayName.of(code)})).filter(country=>country.name).sort((a,b)=>a.name.localeCompare(b.name,'en-GB'));
     const unitedKingdom=countries.find(country=>country.code==='GB');
     const orderedCountries=unitedKingdom?[unitedKingdom,...countries.filter(country=>country.code!=='GB')]:countries;
     deliveryCountry.replaceChildren(...orderedCountries.map(country=>{const option=document.createElement('option');option.value=country.code;option.textContent=country.name;return option}));
