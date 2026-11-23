@@ -1,12 +1,14 @@
 const products=window.STORE_PRODUCTS||[];
 const deliveryCountry=document.querySelector('#delivery-country');
 if(deliveryCountry&&Array.isArray(window.PENNYBUYS_COUNTRY_CODES)){
-  const displayName=new Intl.DisplayNames(['en-GB'],{type:'region'});
-  const countries=window.PENNYBUYS_COUNTRY_CODES.map(code=>({code,name:displayName.of(code)})).sort((a,b)=>a.name.localeCompare(b.name,'en-GB'));
-  const unitedKingdom=countries.find(country=>country.code==='GB');
-  const orderedCountries=[unitedKingdom,...countries.filter(country=>country.code!=='GB')];
-  deliveryCountry.replaceChildren(...orderedCountries.map(country=>{const option=document.createElement('option');option.value=country.code;option.textContent=country.name;return option}));
-  deliveryCountry.value='GB';
+  try{
+    const displayName=new Intl.DisplayNames(['en-GB'],{type:'region'});
+    const countries=window.PENNYBUYS_COUNTRY_CODES.map(code=>({code,name:displayName.of(code)})).filter(country=>country.name).sort((a,b)=>a.name.localeCompare(b.name,'en-GB'));
+    const unitedKingdom=countries.find(country=>country.code==='GB');
+    const orderedCountries=unitedKingdom?[unitedKingdom,...countries.filter(country=>country.code!=='GB')]:countries;
+    deliveryCountry.replaceChildren(...orderedCountries.map(country=>{const option=document.createElement('option');option.value=country.code;option.textContent=country.name;return option}));
+    deliveryCountry.value='GB';
+  }catch(error){console.warn('The country selector could not be expanded:',error.message)}
 }
 const bagKey='pennybuys-bag';
 const money=value=>window.PennyBuysCurrency?.format(value)||`£${Number(value).toFixed(2)}`;
@@ -21,7 +23,8 @@ let freeDeliveryCount=0,deliveryConfig={},activeOffer=null;
 const empty=document.querySelector('#checkout-empty');
 const content=document.querySelector('#checkout-content');
 if(new URLSearchParams(location.search).has('cancelled'))window.alert('Payment was cancelled. Your basket is still here whenever you are ready.');
-if(!lines.length){empty.hidden=false;}else{
+if(!lines.length){empty.hidden=false;content.hidden=true;}else{
+  empty.hidden=true;
   content.hidden=false;
   function renderCheckoutPrices(){
     const deliveryInfo=window.PennyBuysDelivery.calculate(lines,deliveryConfig,itemCount,freeDeliveryCount);
