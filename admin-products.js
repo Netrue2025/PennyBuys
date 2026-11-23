@@ -158,7 +158,12 @@ function editProduct(product){
   document.querySelector('#cancel-edit').hidden=false;
   productMessage.textContent='';productMessage.classList.remove('success');
   window.dispatchEvent(new Event('pennybuys:productedit'));
-  productForm.scrollIntoView({behavior:'smooth',block:'start'});
+  // The admin page router hides sections that do not belong to the current
+  // page. Reveal the editor before scrolling, otherwise edit appears to do
+  // nothing when the inventory and editor are on separate dashboard pages.
+  const editor=document.querySelector('#product-editor');
+  if(editor)editor.hidden=false;
+  (editor||productForm).scrollIntoView({behavior:'smooth',block:'start'});
 }
 function renderMediaEditor(){
   existingMedia.hidden=!mediaItems.length&&!currentVideoUrl&&!videoInput.files.length;
