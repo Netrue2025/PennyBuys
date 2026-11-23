@@ -48,7 +48,7 @@ document.querySelector('#checkout-contact-form').addEventListener('submit',async
     if(!result.client_secret||!result.publishable_key||!result.order_url)throw new Error('Stripe Checkout is not configured. Add STRIPE_PUBLISHABLE_KEY to the server environment.');
     if(typeof Stripe!=='function')throw new Error('Stripe.js did not load. Refresh the page and try again.');
     const stripe=Stripe(result.publishable_key);
-    const appearance={theme:'stripe',labels:'auto',inputs:'spaced',variables:{borderRadius:'4px',colorBackground:'#ffffff',colorDanger:'#df1b41',colorPrimary:'#0570de',colorSuccess:'#00c853',colorText:'#30313d',fontFamily:'default',fontSizeBase:'16px',spacingUnit:'4px'}};
+    const appearance={theme:'stripe',labels:'auto',inputs:'spaced',variables:{borderRadius:'4px',colorBackground:'#ffffff',colorDanger:'#df1b41',colorPrimary:'#0570de',colorSuccess:'#00c853',colorText:'#30313d',fontFamily:'Roboto',fontSizeBase:'16px',spacingUnit:'4px'}};
     const checkout=stripe.initCheckoutFormSdk({clientSecret:Promise.resolve(result.client_secret),appearance});
     const form=checkout.createForm({layout:'expanded'});
     document.querySelector('#checkout-contact-form').hidden=true;
